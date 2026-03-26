@@ -456,9 +456,7 @@ const EVAL_DOMAINS=[
 const SUBJECTS=[
   {key:"pyp",  label:"PYP",      full:"Primary Years Programme"},
   {key:"ela",  label:"ELA",      full:"English Language Arts"},
-  {key:"ss101",label:"SS101",    full:"Social Studies"},
-  {key:"vocab",label:"Vocabulary",full:"Vocabulary"},
-  {key:"sci",  label:"Science",  full:"Science"}
+  {key:"ss101",label:"SS101",    full:"Social Studies"}
 ];
 const CONS_TYPES=["전화","대면","문자","화상","기타"];
 
@@ -629,7 +627,7 @@ function calcDomainScore(items){
 function hasStuScore(md){
   // subjects 방식(신) 또는 sr 방식(구) 중 하나라도 있으면 OK
   const hasSubj=md.subjects&&Object.values(md.subjects).some(d=>d.score&&d.max);
-  const hasSR=md.sr?.score&&md.sr?.maxScore;
+  const hasSR=md.sr?.ss||md.sr?.pr;
   return !!(hasSubj||hasSR);
 }
 function stuCompletionPct(id){
@@ -740,7 +738,7 @@ function openStudentMonthReset(id){
   const filled=[];
   const empty=[];
   const items=[
-    {key:"성적", ok:!!(md.sr?.score&&md.sr?.maxScore)},
+    {key:"성적", ok:!!(md.sr?.ss||md.sr?.pr||(md.subjects&&Object.keys(md.subjects).length>0))},
 
     {key:"영역평가", ok:!!md.eval},
     {key:"진도", ok:!!(md.books?.length&&md.books.some(b=>b.completedUnits>0||b.pct>0))},
@@ -1348,6 +1346,61 @@ function renderScoreTab(id,md,cls,locked){
   html+=`</tbody></table></div>
     ${!locked||user.role==="admin"?`<button class="btn btn-primary no-print" style="margin-top:12px" onclick="saveScore('${id}')">💾 성적 저장</button>`:""}
   </div>`;
+
+  // ── SR TEST RESULTS ──
+  const sr=md.sr||{};
+  const dis2=locked&&user.role!=="admin"?"disabled":"";
+  html+=`<div class="card" style="margin-top:12px">
+    <h3 style="margin-bottom:14px">📋 SR TEST RESULTS</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">SR Test Date:
+      <input type="text" id="sr-date" value="${sr.date||""}" ${dis2} placeholder="예: March 20"
+        style="border:none;border-bottom:1px solid #C9A84C;padding:2px 6px;font-size:12px;color:#C9A84C;font-weight:700;outline:none;width:120px">
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="background:#1A3169;color:#C9A84C">
+          <th style="padding:8px 10px;text-align:center">Scale Score (SS)</th>
+          <th style="padding:8px 10px;text-align:center">Percentile Rank (PR)</th>
+          <th style="padding:8px 10px;text-align:center">Grade Equiv. (GE)</th>
+          <th style="padding:8px 10px;text-align:center">IRL</th>
+          <th style="padding:8px 10px;text-align:center">Est. ORF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:#f8f9ff">
+          <td style="padding:8px 6px;text-align:center">
+            <input type="number" id="sr-ss" min="0" value="${sr.ss||""}" ${dis2} placeholder="965" min="0"
+              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
+          </td>
+          <td style="padding:8px 6px;text-align:center">
+            <input type="number" id="sr-pr" min="0" value="${sr.pr||""}" ${dis2} placeholder="87"
+              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
+          </td>
+          <td style="padding:8px 6px;text-align:center">
+            <input type="text" id="sr-ge" value="${sr.ge||""}" ${dis2} placeholder="3.6"
+              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
+          </td>
+          <td style="padding:8px 6px;text-align:center">
+            <input type="text" id="sr-irl" value="${sr.irl||""}" ${dis2} placeholder="3.2"
+              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
+          </td>
+          <td style="padding:8px 6px;text-align:center">
+            <input type="number" id="sr-orf" min="0" value="${sr.orf||""}" ${dis2} placeholder="100"
+              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#555">
+      Reading Recommendation ZPD:
+      <input type="text" id="sr-zpd" value="${sr.zpd||""}" ${dis2} placeholder="예: 2.8 – 4.1"
+        style="border:none;border-bottom:1px solid #1A3169;padding:2px 6px;font-size:12px;font-weight:700;outline:none;width:120px">
+    </div>
+    ${!locked||user.role==="admin"?`<button class="btn btn-primary no-print" style="margin-top:12px" onclick="saveSR('${id}')">💾 SR 저장</button>`:""}
+  </div>`;
+
   return html;
 }
 
@@ -1631,6 +1684,8 @@ function renderCommentTab(id,md,locked){
       </div>
       ${acmtBlock()}
     </div>`:""}
+
+
   </div>`;
   return html;
 }
@@ -1808,6 +1863,29 @@ async function saveEval(id){
   });
 }
 
+async function saveSR(id){
+  const date=document.getElementById("sr-date")?.value.trim()||"";
+  const ss=document.getElementById("sr-ss")?.value.trim()||"";
+  const pr=document.getElementById("sr-pr")?.value.trim()||"";
+  const ge=document.getElementById("sr-ge")?.value.trim()||"";
+  const irl=document.getElementById("sr-irl")?.value.trim()||"";
+  const orf=document.getElementById("sr-orf")?.value.trim()||"";
+  const zpd=document.getElementById("sr-zpd")?.value.trim()||"";
+  if(!ss&&!pr){showToast("SR 점수를 입력하세요");return;}
+  const lines=[
+    `Scale Score: <b>${ss}</b>`,
+    `Percentile Rank: <b>${pr}</b>`,
+    ge?`Grade Equiv.: <b>${ge}</b>`:"",
+    irl?`IRL: <b>${irl}</b>`:"",
+    orf?`Est. ORF: <b>${orf}</b>`:"",
+    zpd?`ZPD: <b>${zpd}</b>`:""
+  ].filter(Boolean);
+  confirmSavePopup("📋 SR 저장",lines,async()=>{
+    await saveStudentMD(id,{sr:{date,ss:ss?+ss:null,pr:pr?+pr:null,ge,irl,orf:orf?+orf:null,zpd}});
+    showToast("SR 저장 완료 ✓");
+    renderInp(id);
+  });
+}
 async function saveScore(id){
   const subjects={};
   const lines=[];
@@ -2002,10 +2080,11 @@ function renderTchrMgmt(){
         <td style="padding:12px;text-align:center">
           <button onclick="openAssignModal('${id}')" style="background:#C9A84C;color:#1A3169;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;margin-right:4px">반배정</button>
           <button onclick="openEditTchrModal('${id}')" style="background:#1A3169;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-right:4px">수정</button>
-          <label title="서명 업로드" style="background:#f0f7ff;color:#1565C0;border:1px solid #b3d4f5;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;margin-right:4px;display:inline-block">
-            ✍️${SIGN_IMGS[t.cls||id]?"✅":""}
+          <label title="서명 업로드" style="background:#f0f7ff;color:#1565C0;border:1px solid #b3d4f5;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;margin-right:4px;display:inline-flex;align-items:center;gap:2px;vertical-align:middle">
+            ✍️${SIGN_IMGS[t.cls||id]?`<span style="font-size:11px">✅</span>`:""}
             <input type="file" accept="image/*" onchange="uploadSign('${t.cls||id}',this)" style="display:none">
           </label>
+          ${SIGN_IMGS[t.cls||id]?`<button onclick="deleteSign('${t.cls||id}')" style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px;margin-right:4px">🗑 서명</button>`:""}
           <button onclick="deleteTchr('${id}')" style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12px">삭제</button>
         </td>
       </tr>`;
@@ -2348,6 +2427,14 @@ function renderRptMain(id,md){
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
+          <colgroup>
+            <col style="width:28%">
+            <col style="width:9%">
+            <col style="width:9%">
+            <col style="width:9%">
+            <col style="width:9%">
+            <col style="width:36%">
+          </colgroup>
           <tr style="background:#1A3169;color:#C9A84C">
             <th style="padding:7px 8px;text-align:left">Subject</th>
             <th style="padding:7px 6px;text-align:center">Score</th>
@@ -2390,6 +2477,9 @@ function renderRptMain(id,md){
   html+=`</tbody></table></div>
     </div>
 
+    <!-- ══ SR TEST RESULTS ══ -->
+    ${renderRptSR(md)}
+
     <!-- ══ PERFORMANCE ANALYSIS ══ -->
     <div class="rpt2-section" style="break-inside:avoid;page-break-inside:avoid">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
@@ -2402,7 +2492,17 @@ function renderRptMain(id,md){
   </div>`;
 
   html+=renderRptEval(ev);
-  html+=renderRptBooks(md.books||[]);
+  // 진도: 반 템플릿 + 학생 저장 데이터 병합 (renderBooksTab과 동일 로직)
+  const clsBooks=((settings.classProgress||{})[s.cls]||{})[curMonth]?.books||[];
+  const savedBooks=md.books||[];
+  const mergedBooks=clsBooks.length
+    ? clsBooks.map(cb=>{
+        const saved=savedBooks.find(sb=>sb.title===cb.title)||{};
+        return {title:cb.title,totalUnits:cb.totalUnits||0,completedUnits:saved.completedUnits||0,
+                pct:cb.totalUnits>0?Math.round((saved.completedUnits||0)/cb.totalUnits*100):0};
+      })
+    : savedBooks;
+  html+=renderRptBooks(mergedBooks);
   html+=renderRptComment(id,md);
   return html;
 }
@@ -2443,24 +2543,51 @@ function renderRptEval(ev){
 }
 
 
+function renderRptSR(md){
+  const sr=md.sr||{};
+  if(!sr.ss&&!sr.pr) return "";
+  return '<div class="rpt-wrap"><div class="rpt2-section">'
+    +'<div class="rpt2-section-title">📋 SR TEST RESULTS</div>'
+    +'<div style="font-size:11px;color:#888;margin-bottom:8px">SR Test Date: <b style="color:#C9A84C">'+(sr.date||"—")+'</b></div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr style="background:#1A3169;color:#C9A84C">'
+    +'<th style="padding:6px 8px;text-align:center">Scale Score (SS)</th>'
+    +'<th style="padding:6px 8px;text-align:center">Percentile Rank (PR)</th>'
+    +'<th style="padding:6px 8px;text-align:center">Grade Equiv. (GE)</th>'
+    +'<th style="padding:6px 8px;text-align:center">IRL</th>'
+    +'<th style="padding:6px 8px;text-align:center">Est. ORF</th>'
+    +'</tr></thead>'
+    +'<tbody><tr style="background:#f8f9ff;text-align:center">'
+    +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.ss||"—")+'</td>'
+    +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.pr||"—")+'</td>'
+    +'<td style="padding:8px;font-weight:700">'+(sr.ge||"—")+'</td>'
+    +'<td style="padding:8px;font-weight:700">'+(sr.irl||"—")+'</td>'
+    +'<td style="padding:8px;font-weight:700">'+(sr.orf||"—")+'</td>'
+    +'</tr></tbody></table>'
+    +(sr.zpd?'<div style="margin-top:8px;font-size:12px;color:#333">Reading Recommendation ZPD: <b style="color:#1A3169">'+sr.zpd+'</b></div>':"")
+    +'</div></div>';
+}
 function renderRptBooks(books){
   if(!books.length)return"";
   let html=`<div class="rpt-wrap"><div class="rpt2-section">
-    <div class="rpt2-section-title">📚 이달의 교재 진도</div>`;
+    <div class="rpt2-section-title">📚 MONTHLY CURRICULUM PROGRESS</div>`;
   books.forEach((b,i)=>{
     const pct=b.pct||0;
-    const barColor=pct>=80?"#2E7D32":pct>=50?"#E65100":"#1A3169";
-    html+=`<div class="rpt2-book-row">
-      <div class="rpt2-book-num">${i+1}</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:13px;color:#1A3169;margin-bottom:4px">${b.title||"교재"}</div>
-        <div style="background:#eee;border-radius:6px;height:8px;overflow:hidden">
-          <div style="background:${barColor};height:100%;width:${pct}%;border-radius:6px;transition:width .4s"></div>
-        </div>
-      </div>
-      <div style="text-align:right;min-width:64px">
+    const completedUnits=b.completedUnits||0;
+    const totalUnits=b.totalUnits||0;
+    const barColor=pct>=80?"#2E7D32":pct>=50?"#C9A84C":"#1A3169";
+    const unitLabel=totalUnits?(completedUnits+" / "+totalUnits+" units"):"";
+    html+=`<div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="width:22px;height:22px;background:#1A3169;color:#C9A84C;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">${i+1}</div>
+        <div style="font-weight:700;font-size:13px;color:#1A3169;flex:1">${b.title||"교재"}</div>
         <div style="font-weight:800;font-size:14px;color:${barColor}">${pct}%</div>
-        <div style="font-size:11px;color:#888">${b.completedUnits||0}/${b.totalUnits||0}단원</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;background:#e8ecf2;border-radius:6px;height:10px;overflow:hidden">
+          <div style="background:${barColor};height:100%;width:${pct}%;border-radius:6px"></div>
+        </div>
+        <div style="font-size:11px;color:#888;min-width:80px;text-align:right">${unitLabel}</div>
       </div>
     </div>`;
   });
@@ -2547,11 +2674,24 @@ function renderRptComment(id,md){
         </div>
       </div>
     </div>
-    <div class="rpt2-footer">
-      <div>PETAMUS INTERNATIONAL · English Language Academy · 031-778-7369</div>
-      <div>${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월 · This report serves as an official academic record.</div>
-    </div>
   </div>`;
+
+  // ── NOTICE 섹션 (전체 공통 공지) ──
+  const globalNotice=(settings.globalNotice||{})[curMonth]||"";
+  if(globalNotice){
+    const nextMo=(+curMonth.slice(5))>=12?1:(+curMonth.slice(5))+1;
+    html+=`<div class="rpt-wrap"><div class="rpt2-section">
+      <div class="rpt2-section-title">📢 NOTICE · ${nextMo}월 안내</div>
+      <div style="font-size:13px;line-height:1.9;color:#333;white-space:pre-wrap">${globalNotice.replace(/</g,"&lt;")}</div>
+    </div></div>`;
+  }
+
+  // ── 푸터 (맨 마지막) ──
+  html+=`<div class="rpt-wrap"><div class="rpt2-footer">
+    <div>PETAMUS INTERNATIONAL · English Language Academy · 031-778-7369</div>
+    <div>${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월 · This report serves as an official academic record.</div>
+  </div></div>`;
+
   return html;
 }
 
@@ -2865,6 +3005,34 @@ function getClassAvgDomainByMonth(cls,domainKey,month){
 }
 
 // ── SAVE COMMENT ──
+async function saveGlobalNotice(){
+  const content=document.getElementById("global-notice-inp")?.value.trim()||"";
+  const yr=curMonth.slice(0,4), mo=+curMonth.slice(5);
+  await db.ref("settings/globalNotice/"+curMonth).set(content||null);
+  await loadSettings();
+  showConfirmToast(yr+"년 "+mo+"월 공지 저장 완료 ✓","success");
+  renderCfg();
+}
+async function deleteGlobalNotice(){
+  if(!confirm("공지를 삭제하시겠습니까?")) return;
+  await db.ref("settings/globalNotice/"+curMonth).remove();
+  await loadSettings();
+  showToast("공지 삭제 완료");
+  renderCfg();
+}
+async function saveNotice(id){
+  const content=document.getElementById("notice-inp")?.value.trim()||"";
+  if(!content){showToast("내용을 입력하세요");return;}
+  await saveStudentMD(id,{notice:{content,updatedAt:new Date().toISOString()}});
+  showToast("공지 저장 완료 ✓");
+  renderInp(id);
+}
+async function deleteNotice(id){
+  if(!confirm("공지를 삭제하시겠습니까?"))return;
+  await saveStudentMD(id,{notice:null});
+  showToast("공지 삭제 완료");
+  renderInp(id);
+}
 async function saveComment(id,who){
   const val=document.getElementById(who==="teacher"?"tcmt":"acmt")?.value||"";
   if(!val.trim()){showToast("내용을 입력하세요");return;}
@@ -3803,6 +3971,19 @@ function renderCfg(){
         style="width:90px;border:1px solid #d0d6e0;border-radius:6px;padding:6px 8px;font-size:13px;text-align:center">
     </div>`).join("")}
     <button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="savePins()">PIN 저장</button>
+
+    <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">📢 다음달 안내 (공지)</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:10px;line-height:1.7">
+      여기에 입력하면 <b>전체 학생 보고서</b>에 동일하게 표시됩니다.<br>
+      예: 4월 학사 일정, 시험 일정, 공지사항 등
+    </div>
+    <textarea id="global-notice-inp" rows="5" placeholder="예)&#10;• 4월 학사 일정: ...&#10;• 4월 Test 일정: ..."
+      style="width:100%;resize:vertical;min-height:100px;font-size:13px;line-height:1.7;padding:10px;border:1px solid #d0d6e0;border-radius:6px;box-sizing:border-box">${(settings.globalNotice||{})[curMonth]||""}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveGlobalNotice()">💾 공지 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="deleteGlobalNotice()">🗑 삭제</button>
+    </div>
 
     <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">📌 월별 마감</div>
