@@ -899,15 +899,20 @@ function mobileNav(scr){
   const active=document.getElementById("mnav-"+scr);
   if(active)active.classList.add("active");
   if(scr==="home"){if(user?.role==="admin")go("home");else go("th");}
-  else if(user?.role==="admin")go(scr); // 관리자만 나머지 메뉴 접근 가능
-  else go("th"); // 교사가 잘못된 scr 접근 시 홈으로
+  else if(user?.role==="admin") go(scr);
+  else{
+    // 교사가 접근 가능한 화면
+    const teacherAllowed=["cons","arpt"];
+    if(teacherAllowed.includes(scr)) go(scr);
+    else go("th");
+  }
 }
 function updateMobileNav(scrName){
   document.querySelectorAll(".mob-nav-btn").forEach(b=>b.classList.remove("active"));
   const isAdmin=user?.role==="admin";
   const map=isAdmin
     ?{th:"home",dash:"dash",home:"home",stus:"stus",cons:"cons",prog:"more",cfg:"more",tchr:"more",arpt:"more"}
-    :{th:"home",dash:"home",home:"home",arpt:"arpt",inp:"home",rpt:"arpt"};
+    :{th:"home",dash:"home",home:"home",arpt:"arpt",inp:"home",rpt:"arpt",cons:"cons"};
   const el=document.getElementById("mnav-"+(map[scrName]||"home"));
   if(el)el.classList.add("active");
 }
@@ -1432,7 +1437,10 @@ function renderScoreTab(id,md,cls,locked){
   });
 
   html+=`</tbody></table></div>
-    ${!locked||user.role==="admin"?`<button class="btn btn-primary no-print" style="margin-top:12px" onclick="saveScore('${id}')">💾 성적 저장</button>`:""}
+    ${!locked||user.role==="admin"?`<div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary no-print" onclick="saveScore('${id}')">💾 성적 저장</button>
+      <button class="btn btn-ghost no-print" onclick="resetScoreInputs('${id}')">↩ 되돌리기</button>
+    </div>`:""}
   </div>`;
 
   // ── SR TEST RESULTS ──
@@ -2045,6 +2053,28 @@ function updateSubjAvg(subKey, id){
     gradeEl.textContent=grade;
     gradeEl.style.color=color;
   }
+}
+
+function resetScoreInputs(id){
+  const md=getMD(id);
+  const subj=md.subjects||{};
+  SUBJECTS.forEach(sub=>{
+    const d=subj[sub.key]||{};
+    const scoreEl=document.getElementById("subj-"+sub.key+"-score");
+    const maxEl=document.getElementById("subj-"+sub.key+"-max");
+    if(scoreEl) scoreEl.value=d.score||"";
+    if(maxEl) maxEl.value=d.max||100;
+    // 화면 업데이트
+    updateSubjAvg(sub.key,id);
+  });
+  // SR도 되돌리기
+  const sr=md.sr||{};
+  const fields=["ss","pr","ge","irl","date"];
+  fields.forEach(f=>{
+    const el=document.getElementById("sr-"+f);
+    if(el) el.value=sr[f]||"";
+  });
+  showToast("입력값을 저장된 값으로 되돌렸습니다 ↩");
 }
 
 async function saveScore(id){
