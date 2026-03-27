@@ -3305,32 +3305,149 @@ async function checkSharedReport(){
   return true;
 }
 function renderSharedReport(s,md,month){
-  const sr=md.sr||{};const ct=md.currTest||{};const ev=md.eval||{};
-  const tcmt=md.teacherComment||"";const acmt=md.adminComment||"";
-  const teacherName=TCHR[s.cls]||"담임 선생님";
-  const evalTotal=calcEvalTotal(ev);
-  const evalRows=EVAL_DOMAINS.map(d=>{
-    const items=(ev[d.key]?.items)||[0,0,0,0,0];const sc=calcDomainScore(items);
-    const stars=[1,2,3,4,5].map(n=>"<span style='color:"+(sc>=n?"#f1c40f":"#ddd")+";font-size:18px'>★</span>").join("");
-    return "<tr><td style='padding:8px;border-bottom:1px solid #f5f5f5'>"+d.icon+" "+d.label+"</td><td>"+stars+"</td><td style='font-weight:600'>"+(sc>0?sc.toFixed(1)+" / 5.0":"-")+"</td></tr>";
+  const sr=md.sr||{};
+  const ev=md.eval||{};
+  const tcmt=md.teacherComment||"";
+  const acmt=md.adminComment||"";
+  const tcmtAt=md.teacherCommentAt?md.teacherCommentAt.slice(0,10):"";
+  const acmtAt=md.adminCommentAt?md.adminCommentAt.slice(0,10):"";
+  const teacherName=TCHR[s.cls]||"Homeroom Teacher";
+  const clsLv=CLS_LEVEL[s.cls]||"";
+  const monthLabel=month.slice(0,4)+"년 "+(+month.slice(5))+"월";
+
+  // 과목별 성적
+  const subj=md.subjects||{};
+  const subjRows=SUBJECTS.map(sub=>{
+    const d=subj[sub.key]||{};
+    const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
+    if(!d.score&&!d.max) return "";
+    const grade=pct>=93?"A":pct>=90?"A-":pct>=87?"B+":pct>=83?"B":pct>=80?"B-":pct>=77?"C+":pct>=73?"C":pct>=70?"C-":pct>=60?"D":"F";
+    const color=pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b";
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:600">${sub.label}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${d.score} / ${d.max}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:700;color:${color}">${pct}%</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:800;color:${color}">${grade}</td>
+    </tr>`;
   }).join("");
-  const books=(md.books||[]).map(b=>"<div style='display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5;font-size:13px'><div><b>"+b.title+"</b>"+(b.unit?" · "+b.unit:"")+"</div><div style='font-weight:700;color:#1A3169'>"+(b.unitTotal?(b.unitDone||0)+"/"+b.unitTotal+"단원 ("+( b.pct||0)+"%)":(b.pct||0)+"%")+"</div></div>").join("");
-  return "<!DOCTYPE html><html lang='ko'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+s.name+" 학습 보고서</title><link href='https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap' rel='stylesheet'><style>*{box-sizing:border-box;margin:0;padding:0;font-family:\"Noto Sans KR\",sans-serif}body{background:#f4f6f9;max-width:600px;margin:0 auto;padding:16px}.header{background:linear-gradient(135deg,#1A3169,#2a4a8a);color:#fff;border-radius:12px;padding:20px;margin-bottom:16px;text-align:center}.card{background:#fff;border-radius:10px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.07)}.card h3{font-size:14px;font-weight:700;color:#1A3169;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #f0f0f0}.comment-box{background:#fffdf5;border:1px solid #e8d8a0;border-radius:8px;padding:12px;font-size:13px;line-height:1.8;margin-top:8px}table{width:100%;border-collapse:collapse;font-size:13px}.footer{text-align:center;padding:20px;color:#aaa;font-size:12px}</style></head><body>"
-    +"<div class='header'><div style='font-size:12px;opacity:.8;margin-bottom:4px'>PETAMUS INTERNATIONAL</div><div style='font-size:20px;font-weight:700'>"+s.name+" ("+s.ename+")</div><div style='font-size:13px;opacity:.8;margin-top:4px'>"+s.cls+"반 · "+month.slice(0,4)+"년 "+(+month.slice(5))+"월 학습 보고서</div></div>"
-    +"<div class='card'><h3>📊 성적 현황</h3><div style='display:flex;gap:8px'>"
-    +"<div style='flex:1;text-align:center;padding:12px;background:#f8f9ff;border-radius:8px'><div style='font-size:10px;color:#888'>SR 테스트</div><div style='font-size:24px;font-weight:800;color:#1A3169'>"+(sr.score&&sr.maxScore?Math.round(sr.score/sr.maxScore*100)+"%":"—")+"</div></div>"
-    +"<div style='flex:1;text-align:center;padding:12px;background:#fffdf0;border-radius:8px'><div style='font-size:10px;color:#888'>커리큘럼</div><div style='font-size:24px;font-weight:800;color:#C9A84C'>"+(ct.score&&ct.maxScore?Math.round(ct.score/ct.maxScore*100)+"%":"—")+"</div></div>"
 
-    +"</div></div>"
-    +(evalRows?"<div class='card'><h3>🎯 영역별 평가</h3><table><tbody>"+evalRows+"</tbody></table></div>":"")
-    +(books?"<div class='card'><h3>📚 MONTHLY CURRICULUM PROGRESS</h3>"+books+"</div>":"")
-    +(tcmt||acmt?"<div class='card'><h3>💬 코멘트</h3>"
-      +(tcmt?"<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px'><div style='background:#1A3169;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'>"+teacherName[0]+"</div><div style='font-size:12px;font-weight:700;color:#1A3169'>"+teacherName+"</div></div><div class='comment-box' style='background:#f8f9ff;border-color:#c0d0f0'>"+tcmt.split("\n").join("<br>")+"</div>":"")
-      +(acmt?"<div style='display:flex;align-items:center;gap:8px;margin:12px 0 8px'><div style='background:#C9A84C;color:#1A3169;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'>HT</div><div style='font-size:12px;font-weight:700;color:#1A3169'>Head Teacher</div></div><div class='comment-box'>"+acmt.split("\n").join("<br>")+"</div>":"")
-      +"</div>":"")
-    +"<div class='footer'>Petamus International · 031-778-7369</div></body></html>";
+  // SR 성적
+  const srSection=sr.ss||sr.ge?`<div class="card">
+    <h3>📋 SR TEST RESULTS</h3>
+    ${sr.date?`<div style="font-size:11px;color:#888;margin-bottom:10px">Test Date: <b style="color:#C9A84C">${sr.date}</b></div>`:""}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">
+      <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">Scale Score</div><div style="font-size:18px;font-weight:800;color:#1A3169">${sr.ss||"—"}</div></div>
+      <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">Percentile</div><div style="font-size:18px;font-weight:800;color:#1A3169">${sr.pr||"—"}</div></div>
+      <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">Grade Equiv.</div><div style="font-size:18px;font-weight:800;color:#C9A84C">${sr.ge||"—"}</div></div>
+      <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">IRL</div><div style="font-size:18px;font-weight:800;color:#1A3169">${sr.irl||"—"}</div></div>
+    </div>
+  </div>`:"";
+
+  // 영역별 평가
+  const evalRows=EVAL_DOMAINS.map(d=>{
+    const sc=calcDomainScore((ev[d.key]?.items)||[]);
+    const stars=[1,2,3,4,5].map(n=>`<span style="color:${sc>=n?"#f1c40f":"#ddd"};font-size:16px">★</span>`).join("");
+    return `<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5">${d.icon} ${d.label}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5">${stars}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f5f5f5;font-weight:600;color:#1A3169">${sc>0?sc.toFixed(1)+" / 5.0":"—"}</td>
+    </tr>`;
+  }).join("");
+
+  // 진도
+  const clsBooks=((settings.classProgress||{})[s.cls]||{})[month]?.books||[];
+  const savedBooks=md.books||[];
+  const books=clsBooks.length
+    ?clsBooks.map(cb=>{const saved=savedBooks.find(sb=>sb.title===cb.title);const cu=saved?saved.completedUnits:(cb.completedUnits||0);return{title:cb.title,totalUnits:cb.totalUnits||0,completedUnits:cu,pct:cb.totalUnits>0?Math.round(cu/cb.totalUnits*100):0};})
+    :savedBooks.map(b=>({title:b.title,totalUnits:b.totalUnits||0,completedUnits:b.completedUnits||0,pct:b.pct||0}));
+  const booksHtml=books.map(b=>{
+    const color=b.pct>=80?"#2e7d32":b.pct>=50?"#C9A84C":"#1A3169";
+    return `<div style="padding:10px 0;border-bottom:1px solid #f5f5f5">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-weight:600;font-size:13px">${b.title}</span>
+        <span style="font-weight:700;color:${color}">${b.completedUnits}/${b.totalUnits}단원 · ${b.pct}%</span>
+      </div>
+      <div style="background:#e8ecf2;border-radius:4px;height:5px">
+        <div style="background:${color};height:5px;border-radius:4px;width:${b.pct}%"></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // 코멘트
+  const commentSection=(tcmt||acmt)?`<div class="card">
+    <h3>💬 TEACHER'S OVERALL COMMENT</h3>
+    ${tcmt?`<div style="margin-bottom:${acmt?14:0}px">
+      <div style="font-size:11px;font-weight:700;color:#1A3169;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${teacherName}${tcmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px">· ${tcmtAt}</span>`:""}</div>
+      <div style="font-size:13px;line-height:1.9;color:#333">${tcmt.replace(/\n/g,"<br>")}</div>
+    </div>`:""}
+    ${acmt?`<div>
+      ${tcmt?`<div style="border-top:1px solid #f0f0f0;margin-bottom:14px"></div>`:""}
+      <div style="font-size:11px;font-weight:700;color:#C9A84C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Head Teacher${acmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px">· ${acmtAt}</span>`:""}</div>
+      <div style="font-size:13px;line-height:1.9;color:#333">${acmt.replace(/\n/g,"<br>")}</div>
+    </div>`:""}
+  </div>`:"";
+
+  return `<!DOCTYPE html><html lang="ko"><head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+    <title>${s.name} · ${monthLabel} 보고서</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif}
+      body{background:#f4f6f9;max-width:680px;margin:0 auto;padding:16px}
+      .card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+      .card h3{font-size:13px;font-weight:800;color:#1A3169;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #C9A84C;text-transform:uppercase;letter-spacing:.5px}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      .footer{text-align:center;padding:24px;color:#aaa;font-size:12px}
+    </style>
+  </head><body>
+    <!-- 헤더 -->
+    <div style="background:linear-gradient(135deg,#0f1f4e 0%,#1A3169 60%,#2a4a8a 100%);border-radius:16px;padding:20px;margin-bottom:12px;color:#fff">
+      <div style="font-size:11px;font-weight:700;color:#C9A84C;letter-spacing:1px;margin-bottom:10px">PETAMUS INTERNATIONAL</div>
+      <div style="font-size:22px;font-weight:800">${s.name} <span style="font-size:15px;font-weight:400;opacity:.75">${s.ename||""}</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <span style="background:rgba(201,168,76,.25);color:#C9A84C;border:1px solid rgba(201,168,76,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600">${s.cls}반</span>
+        ${clsLv?`<span style="background:rgba(201,168,76,.25);color:#C9A84C;border:1px solid rgba(201,168,76,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600">${clsLv}</span>`:""}
+        <span style="background:rgba(201,168,76,.25);color:#C9A84C;border:1px solid rgba(201,168,76,.5);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600">${monthLabel}</span>
+      </div>
+    </div>
+
+    <!-- 과목별 성적 -->
+    ${subjRows?`<div class="card">
+      <h3>📊 Subject Scores</h3>
+      <table>
+        <thead><tr style="background:#f0f4ff">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:#888;font-weight:600">과목</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">점수</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">%</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">Grade</th>
+        </tr></thead>
+        <tbody>${subjRows}</tbody>
+      </table>
+    </div>`:""}
+
+    <!-- SR 성적 -->
+    ${srSection}
+
+    <!-- 영역별 평가 -->
+    ${evalRows?`<div class="card">
+      <h3>🎯 Attitude & Participation</h3>
+      <table><tbody>${evalRows}</tbody></table>
+    </div>`:""}
+
+    <!-- 커리큘럼 진도 -->
+    ${booksHtml?`<div class="card">
+      <h3>📚 Monthly Curriculum Progress</h3>
+      ${booksHtml}
+      ${md.arBooks?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;font-size:13px"><span style="color:#888">AR Reading</span><span style="font-weight:700;color:#1A3169">${md.arBooks}권</span></div>`:""}
+    </div>`:""}
+
+    <!-- 코멘트 -->
+    ${commentSection}
+
+    <div class="footer">Petamus International · 031-778-7369<br>
+    <span style="font-size:10px">본 보고서는 공식 학습 기록입니다</span></div>
+  </body></html>`;
 }
-
 // ── ADMIN: DASHBOARD ──
 async function renderDash(){
   let html=`<div class="card"><h3>📊 대시보드 — ${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</h3>
@@ -3422,7 +3539,7 @@ function filterStus(){
       .sort((a,b)=>(b.withdrawnAt||"").localeCompare(a.withdrawnAt||""));
     if(!stus.length){el.innerHTML='<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px">퇴원생이 없습니다</div>';return;}
     el.innerHTML=stus.map(s=>`
-      <div class="stu-item" style="margin-bottom:4px;opacity:.85">
+      <div class="stu-item" style="margin-bottom:4px;opacity:.85;cursor:pointer" onclick="openEditStu('${s.id}')">
         <div class="stu-avatar" style="background:#aaa">${s.name[0]}</div>
         <div class="stu-info" style="flex:1">
           <div class="stu-name">${s.name} <span style="color:var(--gray);font-weight:400;font-size:11px">${s.ename||""}</span>
@@ -3430,7 +3547,7 @@ function filterStus(){
           </div>
           <div style="font-size:11px;color:var(--gray)">${s.cls||""}반 · ${s.grade||""} · 퇴원일: ${s.withdrawnAt?s.withdrawnAt.slice(0,10):"미기록"}</div>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px" onclick="event.stopPropagation()">
           <button onclick="reinstatestu('${s.id}')" style="background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">↩ 복원</button>
           <button onclick="deleteStuPermanently('${s.id}','${s.name}')" style="background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">🗑 삭제</button>
         </div>
@@ -4242,7 +4359,6 @@ async function saveProg(cls){
 // ── ADMIN: ALL REPORTS ──
 function renderARpt(){
   const stus=activeStudents().sort((a,b)=>a.cls.localeCompare(b.cls)||a.name.localeCompare(b.name,"ko"));
-  // Teacher sees only their own class
   const viewCls=user.role==="admin"?null:user.cls;
   let html=`<div class="card"><h3>📋 ${viewCls?viewCls+"반 ":"전체 "}보고서</h3>
     <div style="font-size:12px;color:var(--gray);margin-bottom:12px">${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</div>`;
@@ -4250,7 +4366,11 @@ function renderARpt(){
   clsList.forEach(cls=>{
     const cs=stus.filter(s=>s.cls===cls);
     if(!cs.length)return;
-    html+=`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">${CLS_EMOJI[cls]} ${cls}반</div>
+    html+=`<div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--navy)">${CLS_EMOJI[cls]} ${cls}반 (${cs.length}명)</div>
+        <button class="btn btn-ghost btn-sm" onclick="bulkPrintCls('${cls}')" style="font-size:11px;gap:4px">🖨 반 전체 인쇄</button>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">`;
     cs.forEach(s=>{
       const pct=stuCompletionPct(s.id);
@@ -4269,6 +4389,54 @@ function renderARpt(){
 function openARpt(id){
   rptTab=0;selId=id;
   go("rpt",{id});
+}
+
+async function bulkPrintCls(cls){
+  const stus=activeStudents().filter(s=>s.cls===cls)
+    .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+  if(!stus.length){ showToast("해당 반 학생이 없습니다"); return; }
+
+  showToast(`${cls}반 보고서 생성 중... (${stus.length}명)`);
+
+  // 새 창에 모든 학생 보고서를 연속으로 렌더
+  const win=window.open("","_blank");
+  win.document.write(`<!DOCTYPE html><html lang="ko"><head>
+    <meta charset="UTF-8">
+    <title>${cls}반 보고서 — ${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\/script>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif}
+      body{background:#fff;padding:0}
+      .page{padding:20px;page-break-after:always}
+      .page:last-child{page-break-after:avoid}
+      @media print{
+        .no-print{display:none!important}
+        body{padding:0}
+        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+      }
+      /* 보고서 스타일 복사 */
+      .rpt-wrap{max-width:700px;margin:0 auto 16px}
+      .rpt2-header{background:linear-gradient(135deg,#0f1f4e 0%,#1A3169 60%,#2a4a8a 100%);border-radius:16px;padding:24px;margin-bottom:12px;color:#fff}
+      .rpt2-section{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:12px;border:1px solid #e8ecf2}
+      .rpt2-section-title{font-size:13px;font-weight:800;color:#1A3169;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #C9A84C;text-transform:uppercase;letter-spacing:.5px}
+    </style>
+  </head><body>`);
+
+  for(const s of stus){
+    const md=getMD(s.id);
+    // renderRptMain 결과를 가져와서 삽입
+    const html=renderRptMain(s.id,md);
+    win.document.write(`<div class="page">${html}</div>`);
+  }
+
+  win.document.write(`
+    <div class="no-print" style="position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:999">
+      <button onclick="window.print()" style="background:#1A3169;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🖨 인쇄</button>
+      <button onclick="window.close()" style="background:#f0f0f0;color:#333;border:none;padding:12px 24px;border-radius:8px;font-size:15px;cursor:pointer">✕ 닫기</button>
+    </div>
+  </body></html>`);
+  win.document.close();
 }
 
 // ── ADMIN: SETTINGS ──
