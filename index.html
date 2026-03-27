@@ -10,6 +10,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
 body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:column;overflow:hidden}
 :root{--navy:#1A3169;--gold:#C9A84C;--cream:#F5F0E8;--red:#e74c3c;--green:#27ae60;--gray:#8892a0;--light:#eef0f5}
 
@@ -152,18 +154,50 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
 .rpt2-comment-card{border-left:4px solid #1A3169;border-radius:0 10px 10px 0;padding:14px;background:#f8f9ff}
 .rpt2-comment-who{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .rpt2-comment-body{font-size:13px;line-height:1.8;color:#333;background:#fff;border-radius:8px;padding:12px}
+
+/* ── SPEECH BUBBLE ── */
+.bubble-wrap{display:flex;flex-direction:column;gap:16px}
+.bubble-row{display:flex;align-items:flex-start;gap:10px}
+.bubble-row.right{flex-direction:row-reverse}
+.bubble-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;font-weight:700}
+.bubble-avatar.navy{background:#1A3169;color:#fff}
+.bubble-avatar.gold{background:#C9A84C;color:#fff}
+.bubble-content{display:flex;flex-direction:column;max-width:85%}
+.bubble-name{font-size:10px;font-weight:700;color:#888;margin-bottom:4px;letter-spacing:.3px;text-transform:uppercase}
+.bubble-row.right .bubble-name{text-align:right}
+.bubble-box{position:relative;padding:12px 16px;border-radius:18px;font-size:13px;line-height:1.8;color:#333}
+.bubble-box.navy{background:#eef2ff;color:#1A3169;border:1.5px solid #1A3169;border-bottom-left-radius:4px}
+.bubble-box.navy::before{content:"";position:absolute;left:-9px;bottom:10px;border:8px solid transparent;border-right-color:#1A3169;border-left:0;border-bottom:0}
+.bubble-box.gold{background:#fffdf0;border:1.5px solid #C9A84C;border-bottom-right-radius:4px}
+.bubble-box.gold::before{content:"";position:absolute;right:-9px;bottom:10px;border:8px solid transparent;border-left-color:#C9A84C;border-right:0;border-bottom:0}
+.bubble-date{font-size:10px;color:#bbb;margin-top:4px}
+.bubble-row.right .bubble-date{text-align:right}
 .rpt2-footer{text-align:center;font-size:11px;color:#aaa;padding:16px;border-top:1px solid #e8e0d0;display:flex;justify-content:space-between}
 @media(max-width:700px){
   .rpt2-kpi-grid{grid-template-columns:1fr 1fr}
   .rpt2-eval-grid{grid-template-columns:1fr}
 }
 @media print{
-  .rpt-wrap{max-width:100%!important}
+  body{height:auto!important;overflow:visible!important}
+  .rpt-wrap{max-width:100%!important;margin-bottom:6px!important}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  .rpt2-section{box-shadow:none!important;border:1px solid #e8ecf2!important;padding:8px 12px!important;margin-bottom:6px!important}
-  .rpt2-section-title{font-size:11px!important;margin-bottom:5px!important;padding-bottom:4px!important}
-  .rpt2-header{padding:10px 18px!important;margin-bottom:8px!important}
-  .rpt-print-graph .rpt2-section{break-inside:avoid}
+
+  /* 헤더 */
+  .rpt2-header{padding:12px 18px!important;margin-bottom:8px!important;border-radius:8px!important}
+
+  /* 섹션 공통 */
+  .rpt2-section{box-shadow:none!important;border:1px solid #e8ecf2!important;padding:10px 14px!important;margin-bottom:6px!important}
+  .rpt2-section-title{font-size:11px!important;margin-bottom:6px!important;padding-bottom:4px!important;letter-spacing:0!important}
+
+  /* 성적 테이블 */
+  table{font-size:11px!important}
+  td,th{padding:5px 6px!important}
+
+  /* 2페이지 강제 분리 */
+  [style*="break-before:page"],[style*="page-break-before:always"]{
+    page-break-before:always!important;
+    break-before:page!important;
+  }
 }
 
 /* ── SEARCH CLEAR ── */
@@ -470,12 +504,24 @@ let curMonth=new Date().toISOString().slice(0,7);
 let students={};
 let PINS={...DEFAULT_PINS};
 let settings={};
+let consCache={}; // stuId → 상담 건수 캐시
 let TEACHER_LIST={};  // id → {name, pin, cls} 교사 독립 저장소
 let SIGN_IMGS={};     // cls → base64 서명 이미지, admin → 원장 서명
 
 async function loadStudents(){
   const snap=await db.ref("students").once("value");
-  students=snap.val()||{};
+  const raw=snap.val()||{};
+  students={};
+  Object.entries(raw).forEach(([k,v])=>{ students[k]={...v,id:k}; });
+}
+async function loadConsCache(){
+  const snap=await db.ref("consultations").once("value");
+  consCache={};
+  snap.forEach(stuSnap=>{
+    const list=stuSnap.val();
+    const items=Array.isArray(list)?list:Object.values(list||{});
+    consCache[stuSnap.key]=items.filter(Boolean).length;
+  });
 }
 async function loadSettings(){
   const snap=await db.ref("settings").once("value");
@@ -536,7 +582,9 @@ function startStudentListener(){
   _stuListener=true;
   // Realtime students listener
   db.ref("students").on("value",snap=>{
-    students=snap.val()||{};
+    const raw=snap.val()||{};
+    students={};
+    Object.entries(raw).forEach(([k,v])=>{ students[k]={...v,id:k}; });
     if(user&&["th","inp","rpt","arpt"].includes(curScr.name)){
       // inp 화면에서 저장 직후 리스너가 실행되면 이중 렌더 방지
       if(curScr.name==="inp"&&_savingMD){return;}
@@ -570,7 +618,7 @@ function startStudentListener(){
     // Update login dropdown dynamically
     const sel=document.getElementById("cls-sel");
     if(sel){
-      sel.innerHTML=`<option value="admin">관리자</option>`+CLS.map(c=>`<option value="${c}">${CLS_EMOJI[c]||"📚"} ${c}반</option>`).join("");
+      sel.innerHTML=`<option value="admin">🔑 관리자</option>`+CLS.map(c=>`<option value="${c}">${CLS_EMOJI[c]||"📚"} ${c}반</option>`).join("");
     }
     // Refresh if on a screen that depends on settings
     if(user&&["th","prog","cfg","inp","tchr"].includes(curScr.name)){
@@ -601,10 +649,22 @@ function getClassAvg(cls,field){
   const stus=classStu(cls);
   const vals=stus.map(s=>{
     const md=(s.monthlyData||{})[curMonth]||{};
-    if(field==="sr")return md.sr?.score&&md.sr?.maxScore?(md.sr.score/md.sr.maxScore*100):null;
-    if(field==="curr")return md.currTest?.score&&md.currTest?.maxScore?(md.currTest.score/md.currTest.maxScore*100):null;
+    if(field==="sr"){
+      // 신버전: sr.ge (Grade Equivalent)
+      const ge=parseFloat(md.sr?.ge||"");
+      if(!isNaN(ge)&&ge>0) return ge;
+      // 구버전 호환
+      return md.sr?.score&&md.sr?.maxScore?(md.sr.score/md.sr.maxScore*100):null;
+    }
+    if(field==="curr"){
+      // subjects 기반 평균
+      if(md.subjects){
+        const subjVals=Object.values(md.subjects).map(d=>d.score&&d.max?Math.round(d.score/d.max*100):null).filter(v=>v!==null);
+        if(subjVals.length) return subjVals.reduce((a,b)=>a+b,0)/subjVals.length;
+      }
+      return md.currTest?.score&&md.currTest?.maxScore?(md.currTest.score/md.currTest.maxScore*100):null;
+    }
     if(field==="eval")return calcEvalTotal(md.eval);
-
     return null;
   }).filter(v=>v!==null);
   if(!vals.length)return null;
@@ -857,9 +917,22 @@ const SCR_LABELS={"th":"홈","home":"홈","inp":"학생 입력","rpt":"보고서
 
 function go(name,params={},resetStack=false){
   curScr={name,params};
-  if(params.id)selId=params.id;
+  if(params.id) selId=params.id;
+  else selId=null;
   thFilter="all";
-  
+  // cons 탭이 아닌 다른 탭으로 이동하면 상담 선택 상태 초기화
+  if(name!=="cons") consSelId=null;
+  // 현재 화면 상태 sessionStorage에 저장 (새로고침 복원용)
+  try{
+    const saved=sessionStorage.getItem("petamus_session");
+    if(saved){
+      const sess=JSON.parse(saved);
+      sess.scr={name,params};
+      sess.month=curMonth;
+      if(user?.viewCls) sess.viewCls=user.viewCls;
+      sessionStorage.setItem("petamus_session",JSON.stringify(sess));
+    }
+  }catch(e){}
   // Build navStack
   if(name==="login"||resetStack){
     navStack=[];
@@ -960,7 +1033,8 @@ function buildSB(){
       {scr:"cfg",icon:"⚙️",label:"설정"},
     ];
     mgmt.forEach(m=>{
-      html+=`<div class="sb-item" data-scr="${m.scr}" onclick="go('${m.scr}')">
+      const clickFn=m.scr==="cons"?`consSelId=null;go('cons')`:`go('${m.scr}')`;
+      html+=`<div class="sb-item" data-scr="${m.scr}" onclick="${clickFn}">
         <span class="icon">${m.icon}</span><span>${m.label}</span></div>`;
     });
     html+='</div>';
@@ -970,6 +1044,7 @@ function buildSB(){
     let html='<div class="sb-section">';
     html+=`<div class="sb-item" data-scr="th" onclick="go('th')"><span class="icon">🏠</span><span>홈</span></div>`;
     html+=`<div class="sb-item" data-scr="arpt" onclick="go('arpt')"><span class="icon">📋</span><span>보고서</span></div>`;
+    html+=`<div class="sb-item" data-scr="cons" onclick="consSelId=null;go('cons')"><span class="icon">💬</span><span>상담 관리</span></div>`;
     html+='</div>';
     sb.innerHTML=html;
   }
@@ -990,9 +1065,10 @@ function buildSB(){
         <button class="mob-nav-btn" id="mnav-cons" onclick="mobileNav('cons')"><span class="icon">💬</span>상담</button>
         <button class="mob-nav-btn" id="mnav-more" onclick="openMoreMenu()"><span class="icon" style="font-size:22px;font-weight:700">≡</span>더보기</button>`;
     } else {
-      // 교사: 홈과 보고서만
+      // 교사: 홈, 상담, 보고서
       mnav.innerHTML=`
         <button class="mob-nav-btn" id="mnav-home" onclick="mobileNav('home')"><span class="icon">🏠</span>홈</button>
+        <button class="mob-nav-btn" id="mnav-cons" onclick="mobileNav('cons')"><span class="icon">💬</span>상담</button>
         <button class="mob-nav-btn" id="mnav-arpt" onclick="mobileNav('arpt')"><span class="icon">📋</span>보고서</button>`;
     }
   }
@@ -1016,6 +1092,8 @@ function goAdminCls(cls){
   user.viewCls=cls;
   navStack=[{name:"th",params:{},label:cls+" 반"}];
   thFilter="all";
+  selId=null;
+  consSelId=null;
   curScr={name:"th",params:{}};
   // Show layout elements (same as go() but without navStack manipulation)
   document.getElementById("topbar").style.display="flex";
@@ -1047,19 +1125,21 @@ async function doLogin(){
   if(!pin){err.textContent="PIN을 입력해주세요";return;}
   if(PINS[cls]!==pin){err.textContent="PIN이 올바르지 않습니다";return;}
   await loadStudents();
-  await migrateOriozToOrion(); // 구 데이터 오타 수정 (1회성)
-  startStudentListener(); // start realtime sync
+  await loadConsCache();
+  await migrateOriozToOrion();
+  startStudentListener();
   document.getElementById("login-wrap").style.display="none";
-  // 모바일 네비 표시
   if(window.innerWidth<=700){
     document.getElementById("mobile-nav").style.display="flex";
   }
   if(cls==="admin"){
     user={role:"admin",cls:"admin",name:"관리자",viewCls:CLS[0]};
+    sessionStorage.setItem("petamus_session",JSON.stringify({cls:"admin",pin}));
     buildSB();
     go("home");
   } else {
     user={role:"teacher",cls,name:TCHR[cls]};
+    sessionStorage.setItem("petamus_session",JSON.stringify({cls,pin}));
     buildSB();
     go("th");
   }
@@ -1152,7 +1232,7 @@ function renderTH(){
         : `<div class="stu-avatar" style="background:${CLS_COLOR[cls]};margin-top:2px">${s.name[0]}</div>`
       }
       <div class="stu-info">
-        <div class="stu-name">${s.name} <span style="color:var(--gray);font-weight:400;font-size:11px">${s.ename}</span></div>
+        <div class="stu-name">${s.name} <span style="color:var(--gray);font-weight:400;font-size:11px">${s.ename}</span>${(consCache[s.id]||0)>0?`<span style="margin-left:6px;background:#eef2ff;color:#1A3169;border:1px solid #c5cef5;border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px;cursor:pointer" onclick="event.stopPropagation();openConsForStu('${s.id}')">💬 ${consCache[s.id]}건</span>`:""}</div>
         <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
       </div>
       ${stuBadge(s.id)}
@@ -1212,7 +1292,23 @@ function renderInp(id){
   document.getElementById("main").innerHTML=html;
 }
 
-function switchInpTab(i,id){inpTab=i;renderInp(id);}
+async function switchInpTab(i,id){
+  inpTab=i;
+  // 탭 상태 sessionStorage에 저장
+  try{
+    const saved=sessionStorage.getItem("petamus_session");
+    if(saved){
+      const sess=JSON.parse(saved);
+      sess.inpTab=i;
+      sessionStorage.setItem("petamus_session",JSON.stringify(sess));
+    }
+  }catch(e){}
+  if(i===2){
+    await renderBooksTabAsync(id); // 진도 탭: Firebase 직접 fetch
+  } else {
+    renderInp(id);
+  }
+}
 function goHome(){
   inpTab=0;
   thFilter="all";
@@ -1308,37 +1404,37 @@ function renderScoreTab(id,md,cls,locked){
         <tr style="background:#1A3169;color:#C9A84C">
           <th style="padding:8px 10px;text-align:left;border-radius:6px 0 0 0">Subject</th>
           <th style="padding:7px 6px;text-align:center">Score</th>
+          <th style="padding:7px 6px;text-align:center">Class Avg</th>
           <th style="padding:7px 6px;text-align:center">Max</th>
-          <th style="padding:7px 6px;text-align:center">Grade</th>
-          <th style="padding:8px 10px;text-align:left;border-radius:0 6px 0 0">Teacher Comment</th>
+          <th style="padding:7px 6px;text-align:center;border-radius:0 6px 0 0">Grade</th>
         </tr>
       </thead>
       <tbody>`;
 
-  SUBJECTS.forEach((s,i)=>{
-    const d=subj[s.key]||{};
+  SUBJECTS.forEach((sub,i)=>{
+    const d=subj[sub.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     const grade=gradeLabel(pct);
     const bg=i%2===0?"#f8f9ff":"#fff";
     html+=`<tr style="background:${bg};border-bottom:1px solid #e8ecf2">
       <td style="padding:8px 10px;font-weight:700;color:#1A3169">
-        ${s.label}<div style="font-size:10px;color:#888;font-weight:400">${s.full}</div>
+        ${sub.label}<div style="font-size:10px;color:#888;font-weight:400">${sub.full}</div>
       </td>
       <td style="padding:6px;text-align:center">
-        <input type="number" id="subj-${s.key}-score" value="${d.score||""}" ${dis} min="0"
+        <input type="number" id="subj-${sub.key}-score" value="${d.score||""}" ${dis} min="0"
+          oninput="updateSubjAvg('${sub.key}','${id}')"
           style="width:56px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
       </td>
+      <td style="padding:6px;text-align:center;font-weight:700;color:#1A3169;font-size:13px">
+        <span id="subj-avg-${sub.key}">${(()=>{const vals=classStu(cls).map(st=>(((st.monthlyData||{})[curMonth]||{}).subjects||{})[sub.key]?.score).filter(v=>v>0);const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;if(avg===null)return'<span style="color:#ccc">—</span>';const myScore=d.score||0;const color=myScore&&myScore>=avg?"#2e7d32":"#e65100";return`<span style="color:${color}">${avg}</span>`;})()}</span>
+      </td>
       <td style="padding:6px;text-align:center">
-        <input type="number" id="subj-${s.key}-max" value="${d.max||100}" ${dis} min="0"
+        <input type="number" id="subj-${sub.key}-max" value="${d.max||100}" ${dis} min="0"
+          oninput="updateSubjAvg('${sub.key}','${id}')"
           style="width:56px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center">
       </td>
-      <td style="padding:6px;text-align:center;font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b"};font-size:15px">
-        ${grade}
-      </td>
-      <td style="padding:6px 10px">
-        <input type="text" id="subj-${s.key}-cmt" value="${d.comment||""}" ${dis}
-          placeholder="코멘트..."
-          style="width:100%;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:12px;box-sizing:border-box">
+      <td style="padding:6px;text-align:center;font-size:15px">
+        <span id="subj-grade-${sub.key}" style="font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b"}">${grade}</span>
       </td>
     </tr>`;
   });
@@ -1364,39 +1460,29 @@ function renderScoreTab(id,md,cls,locked){
           <th style="padding:8px 10px;text-align:center">Percentile Rank (PR)</th>
           <th style="padding:8px 10px;text-align:center">Grade Equiv. (GE)</th>
           <th style="padding:8px 10px;text-align:center">IRL</th>
-          <th style="padding:8px 10px;text-align:center">Est. ORF</th>
         </tr>
       </thead>
       <tbody>
         <tr style="background:#f8f9ff">
           <td style="padding:8px 6px;text-align:center">
-            <input type="number" id="sr-ss" min="0" value="${sr.ss||""}" ${dis2} placeholder="965" min="0"
+            <input type="number" id="sr-ss" min="0" value="${sr.ss||""}" ${dis2}
               style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
           </td>
           <td style="padding:8px 6px;text-align:center">
-            <input type="number" id="sr-pr" min="0" value="${sr.pr||""}" ${dis2} placeholder="87"
+            <input type="number" id="sr-pr" min="0" value="${sr.pr||""}" ${dis2}
               style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
           </td>
           <td style="padding:8px 6px;text-align:center">
-            <input type="text" id="sr-ge" value="${sr.ge||""}" ${dis2} placeholder="3.6"
+            <input type="text" id="sr-ge" value="${sr.ge||""}" ${dis2}
               style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
           </td>
           <td style="padding:8px 6px;text-align:center">
-            <input type="text" id="sr-irl" value="${sr.irl||""}" ${dis2} placeholder="3.2"
-              style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
-          </td>
-          <td style="padding:8px 6px;text-align:center">
-            <input type="number" id="sr-orf" min="0" value="${sr.orf||""}" ${dis2} placeholder="100"
+            <input type="text" id="sr-irl" value="${sr.irl||""}" ${dis2}
               style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">
           </td>
         </tr>
       </tbody>
     </table>
-    </div>
-    <div style="margin-top:10px;font-size:12px;color:#555">
-      Reading Recommendation ZPD:
-      <input type="text" id="sr-zpd" value="${sr.zpd||""}" ${dis2} placeholder="예: 2.8 – 4.1"
-        style="border:none;border-bottom:1px solid #1A3169;padding:2px 6px;font-size:12px;font-weight:700;outline:none;width:120px">
     </div>
     ${!locked||user.role==="admin"?`<button class="btn btn-primary no-print" style="margin-top:12px" onclick="saveSR('${id}')">💾 SR 저장</button>`:""}
   </div>`;
@@ -1470,30 +1556,57 @@ async function setAttitude(id,key,val){
 }
 
 
+async function renderBooksTabAsync(id){
+  const s=students[id];
+  const cls=s?.cls||"";
+  const snap=await db.ref("settings/classProgress/"+cls+"/"+curMonth+"/books").once("value");
+  const clsBooks=snap.val()||[];
+  if(!settings.classProgress) settings.classProgress={};
+  if(!settings.classProgress[cls]) settings.classProgress[cls]={};
+  if(!settings.classProgress[cls][curMonth]) settings.classProgress[cls][curMonth]={};
+  settings.classProgress[cls][curMonth].books=clsBooks;
+  // inp-body가 있고 현재 진도탭이면 해당 영역만 교체
+  const body=document.getElementById("inp-body");
+  if(body && inpTab===2){
+    const md=getMD(id);
+    const locked=isLocked(s.cls);
+    body.innerHTML=renderBooksTab(id,md,locked);
+  } else if(!body){
+    inpTab=2;
+    renderInp(id);
+  }
+}
+
 function renderBooksTab(id,md,locked){
   const s=students[id];
   const cls=s?.cls||"";
-  // Class template from admin (title + totalUnits)
+  // Class template from admin (title + totalUnits + completedUnits from admin)
   const clsBooks=((settings.classProgress||{})[cls]||{})[curMonth]?.books||[];
   // Student's saved data
   const savedBooks=md.books||[];
-  // Merge: use class template, fill in student's completedUnits
+  // Merge: student data takes priority; fallback to admin's completedUnits
   const books=clsBooks.map(cb=>{
-    const saved=savedBooks.find(sb=>sb.title===cb.title)||{};
-    return {title:cb.title, totalUnits:cb.totalUnits||0, completedUnits:saved.completedUnits||0};
+    const saved=savedBooks.find(sb=>sb.title===cb.title);
+    const completedUnits=saved?saved.completedUnits:(cb.completedUnits||0);
+    return {title:cb.title, totalUnits:cb.totalUnits||0, completedUnits};
   });
   // If no class template but student has own books (legacy)
   const displayBooks=books.length?books:savedBooks.map(b=>({title:b.title,totalUnits:b.totalUnits||0,completedUnits:b.completedUnits||b.pct||0}));
   const dis=locked&&user.role!=="admin";
-  let html=`<div class="card"><h3>📚 진도 현황</h3>`;
+  let html=`<div class="card"><h3>📚 MONTHLY CURRICULUM PROGRESS</h3>`;
   if(clsBooks.length){
     html+=`<div style="font-size:12px;color:var(--gray);margin-bottom:10px">완료 단원 수를 입력하면 진도율이 자동 계산됩니다.</div>`;
+  } else {
+    html+=`<div style="font-size:12px;color:var(--gray);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      관리자 진도 설정을 불러오는 중...
+      <button class="btn btn-ghost btn-xs" onclick="renderBooksTabAsync('${id}')">🔄 새로고침</button>
+    </div>`;
   }
   if(!displayBooks.length){
     html+=`<div style="color:var(--gray);font-size:13px;padding:12px 0">관리자가 교재를 설정하면 여기에 표시됩니다.</div>`;
   } else {
     // Header
-    html+=`<div style="display:grid;grid-template-columns:1fr 70px 70px 60px;gap:6px;margin-bottom:6px">
+    html+=`<div style="display:grid;grid-template-columns:1fr 70px 70px 60px;gap:6px;margin-bottom:6px;padding:0 10px">
       <div style="font-size:11px;color:var(--gray)">교재</div>
       <div style="font-size:11px;color:var(--gray);text-align:center">총단원</div>
       <div style="font-size:11px;color:var(--gray);text-align:center">완료단원</div>
@@ -1505,8 +1618,23 @@ function renderBooksTab(id,md,locked){
   }
   html+=`${!dis?`<div style="margin-top:14px"><button class="btn btn-primary" onclick="saveBooks('${id}')">💾 저장</button></div>`:""}`;
   html+='</div>';
+  // ── AR READING ──
+  const arVal=md.arBooks||"";
+  html+=`<div class="card" style="margin-top:12px">
+    <h3 style="margin-bottom:10px">📖 AR READING</h3>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-size:13px;color:var(--gray)">이달 읽은 AR 도서 권수</div>
+      ${dis
+        ? `<span style="font-weight:700;font-size:16px;color:var(--navy)">${arVal||0}권</span>`
+        : `<input type="number" id="ar-books-input" value="${arVal||""}" min="0" placeholder="0"
+            style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:7px;font-size:15px;text-align:center;font-weight:700">
+           <button class="btn btn-primary btn-sm" onclick="saveARBooks('${id}')">저장</button>`
+      }
+    </div>
+  </div>`;
   return html;
 }
+
 
 function renderBookItem(b,i,dis){
   const pct=b.totalUnits>0?Math.round((b.completedUnits||0)/b.totalUnits*100):0;
@@ -1561,6 +1689,11 @@ async function saveBooks(id){
     await saveStudentMD(id,{books});
     showToast("진도 저장 완료 ✓");
   });
+}
+async function saveARBooks(id){
+  const val=parseInt(document.getElementById("ar-books-input")?.value)||0;
+  await saveStudentMD(id,{arBooks:val});
+  showToast("AR 독서 저장 완료 ✓");
 }
 
 function addBook(){
@@ -1652,7 +1785,7 @@ function renderCommentTab(id,md,locked){
         </div>
       </div>`;
     } else {
-      return `<textarea id="acmt" rows="8" placeholder="관리자 코멘트를 입력하세요..."
+      return `<textarea id="acmt" rows="8" placeholder="Head Teacher 코멘트를 입력하세요..."
         style="width:100%;resize:vertical;min-height:140px;font-size:14px;line-height:1.6;padding:10px;border:1px solid #d0d6e0;border-radius:6px"></textarea>
       <div style="margin-top:8px" class="no-print">
         <button class="btn btn-gold btn-sm" onclick="saveComment('${id}','admin')">💾 저장</button>
@@ -1661,27 +1794,15 @@ function renderCommentTab(id,md,locked){
   };
 
   let html=`<div class="card">
-    <h3>💬 코멘트</h3>
+    <h3>💬 COMMENT</h3>
 
     <div style="background:#f8f9ff;border-radius:8px;padding:12px;margin-bottom:14px;border:1px solid #e0e4ec">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div class="stu-avatar" style="background:${CLS_COLOR[cls]};width:30px;height:30px;font-size:12px">${teacherName[0]}</div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--navy)">${teacherName}</div>
-          <div style="font-size:11px;color:var(--gray)">담임 선생님 ${tcmtAt}</div>
-        </div>
-      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Homeroom Teacher ${tcmtAt}</div>
       ${tcmtBlock()}
     </div>
 
     ${(canEditAdmin||acmt)?`<div style="background:#fffdf5;border-radius:8px;padding:12px;border:1px solid #e8d8a0">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div class="stu-avatar" style="background:var(--navy);width:30px;height:30px;font-size:12px">관</div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--navy)">관리자</div>
-          <div style="font-size:11px;color:var(--gray)">대표 코멘트 ${acmtAt}</div>
-        </div>
-      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Head Teacher ${acmtAt}</div>
       ${acmtBlock()}
     </div>`:""}
 
@@ -1698,7 +1819,7 @@ function switchCommentView(who){
   document.getElementById(who==="teacher"?"tcmt-edit":"acmt-edit").style.display="none";
 }
 async function deleteComment(id,who){
-  if(!confirm((who==="teacher"?"담임":"관리자")+" 코멘트를 삭제하시겠습니까?"))return;
+  if(!confirm((who==="teacher"?"담임":"Head Teacher")+" 코멘트를 삭제하시겠습니까?"))return;
   const update={};
   if(who==="teacher"){update.teacherComment="";update.teacherCommentAt="";}
   else{update.adminComment="";update.adminCommentAt="";}
@@ -1869,23 +1990,61 @@ async function saveSR(id){
   const pr=document.getElementById("sr-pr")?.value.trim()||"";
   const ge=document.getElementById("sr-ge")?.value.trim()||"";
   const irl=document.getElementById("sr-irl")?.value.trim()||"";
-  const orf=document.getElementById("sr-orf")?.value.trim()||"";
-  const zpd=document.getElementById("sr-zpd")?.value.trim()||"";
   if(!ss&&!pr){showToast("SR 점수를 입력하세요");return;}
   const lines=[
     `Scale Score: <b>${ss}</b>`,
     `Percentile Rank: <b>${pr}</b>`,
     ge?`Grade Equiv.: <b>${ge}</b>`:"",
-    irl?`IRL: <b>${irl}</b>`:"",
-    orf?`Est. ORF: <b>${orf}</b>`:"",
-    zpd?`ZPD: <b>${zpd}</b>`:""
+    irl?`IRL: <b>${irl}</b>`:""
   ].filter(Boolean);
   confirmSavePopup("📋 SR 저장",lines,async()=>{
-    await saveStudentMD(id,{sr:{date,ss:ss?+ss:null,pr:pr?+pr:null,ge,irl,orf:orf?+orf:null,zpd}});
+    await saveStudentMD(id,{sr:{date,ss:ss?+ss:null,pr:pr?+pr:null,ge,irl}});
     showToast("SR 저장 완료 ✓");
     renderInp(id);
   });
 }
+function gradeLabel(pct){
+  if(!pct) return "—";
+  if(pct>=93)return"A";if(pct>=90)return"A-";
+  if(pct>=87)return"B+";if(pct>=83)return"B";if(pct>=80)return"B-";
+  if(pct>=77)return"C+";if(pct>=73)return"C";if(pct>=70)return"C-";
+  if(pct>=60)return"D";return"F";
+}
+function updateSubjAvg(subKey, id){
+  const s=students[id];
+  if(!s) return;
+  const cls=s.cls;
+  const myInput=document.getElementById("subj-"+subKey+"-score");
+  const maxInput=document.getElementById("subj-"+subKey+"-max");
+  const myScore=myInput?parseFloat(myInput.value)||0:0;
+  const myMax=maxInput?parseFloat(maxInput.value)||100:100;
+
+  // 반 평균 재계산
+  const vals=classStu(cls).map(st=>{
+    if(st===s) return myScore>0?myScore:null;
+    return (((st.monthlyData||{})[curMonth]||{}).subjects||{})[subKey]?.score||null;
+  }).filter(v=>v>0);
+  const avgEl=document.getElementById("subj-avg-"+subKey);
+  if(avgEl){
+    if(!vals.length){ avgEl.innerHTML='<span style="color:#ccc">—</span>'; }
+    else{
+      const avg=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+      const color=myScore&&myScore>=avg?"#2e7d32":"#e65100";
+      avgEl.innerHTML=`<span style="color:${color}">${avg}</span>`;
+    }
+  }
+
+  // grade 실시간 갱신
+  const gradeEl=document.getElementById("subj-grade-"+subKey);
+  if(gradeEl){
+    const pct=myMax>0?Math.round(myScore/myMax*100):0;
+    const grade=gradeLabel(pct);
+    const color=pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b";
+    gradeEl.textContent=grade;
+    gradeEl.style.color=color;
+  }
+}
+
 async function saveScore(id){
   const subjects={};
   const lines=[];
@@ -1916,7 +2075,7 @@ async function saveScore(id){
 function renderScr(name,params={}){
   const id=params.id||selId;
   // 교사 role 접근 제한
-  const teacherAllowed=["th","inp","rpt","arpt"];
+  const teacherAllowed=["th","inp","rpt","arpt","cons"];
   if(user?.role==="teacher"&&!teacherAllowed.includes(name)){
     renderTH(); return;
   }
@@ -1927,7 +2086,7 @@ function renderScr(name,params={}){
   if(name==="dash"){ renderDash(); return; }
   if(name==="stus"){ renderStus(); return; }
   if(name==="tchr"){ renderTchrMgmt(); return; }
-  if(name==="cons"){ consSelId=null; renderCons(); return; }
+  if(name==="cons"){ if(!consSelId)consSelId=null; renderCons(); return; }
   if(name==="prog"){ renderProg(); return; }
   if(name==="arpt"){ renderARpt(); return; }
   if(name==="cfg"){ renderCfg(); return; }
@@ -2142,6 +2301,7 @@ function openClsModal(editCls){
     <select id="cls-level-select"
       onchange="(function(){const v=document.getElementById('cls-level-select').value;document.getElementById('cls-level-custom').value='';document.getElementById('cls-level-val').value=v;})()"
       style="width:100%;margin-top:4px;margin-bottom:10px;padding:9px 12px;border:1px solid #dde0ee;border-radius:8px;font-size:14px;box-sizing:border-box">
+      <option value="" ${!["Lv.1","Lv.2","Lv.3","Lv.4","Lv.5"].includes(existing.level)&&!existing.level?"selected":""}>— 레벨 없음 —</option>
       ${["Lv.1","Lv.2","Lv.3","Lv.4","Lv.5"].map(l=>`<option value="${l}" ${l===existing.level?"selected":""}>${l}</option>`).join("")}
     </select>
     <label style="font-size:12px;color:#888;font-weight:500">또는 직접 입력 (입력 시 위 선택 무시)</label>
@@ -2337,31 +2497,16 @@ function renderRpt(id){
   const s=students[id];
   if(!s){document.getElementById("main").innerHTML="<div class='card'>학생 없음</div>";return;}
   const md=getMD(id);
-  const tabs=["📋 보고서","📈 누적 그래프"];
   let html=`
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px" class="no-print">
     <div class="stu-avatar" style="background:${CLS_COLOR[s.cls]}">${s.name[0]}</div>
     <div style="flex:1;font-size:15px;font-weight:700;color:var(--navy)">${s.name} ${s.ename} — 보고서</div>
     <button class="btn btn-ghost btn-sm no-print" onclick="shareReport('${id}')">🔗 링크</button>
     <button class="btn btn-gold btn-sm no-print" onclick="window.print()">🖨 인쇄</button>
-  </div>
-  <div class="tab-bar no-print">${tabs.map((t,i)=>`<button class="tab-btn${rptTab===i?" active":""}" onclick="switchRptTab(${i},'${id}')">${t}</button>`).join("")}</div>`;
-  // 화면에는 현재 탭만, 인쇄 시엔 둘 다 출력
-  html+=`<div class="rpt-print-main" style="display:${rptTab===0?'block':'none'}">${renderRptMain(id,md)}</div>`;
-  html+=`<div class="rpt-print-graph" style="display:${rptTab===1?'block':'none'}">${renderRptGraph(id)}</div>`;
+  </div>`;
+  html+=`<div class="rpt-print-main">${renderRptMain(id,md)}</div>`;
   document.getElementById("main").innerHTML=html;
-  if(rptTab===0) setTimeout(()=>drawMainCharts(id), 50);
-  else setTimeout(()=>drawHistoryCharts(id), 50);
-}
-function switchRptTab(i,id){
-  rptTab=i;
-  const main=document.querySelector(".rpt-print-main");
-  const graph=document.querySelector(".rpt-print-graph");
-  if(main) main.style.display=i===0?"block":"none";
-  if(graph) graph.style.display=i===1?"block":"none";
-  document.querySelectorAll(".tab-btn").forEach((b,bi)=>b.classList.toggle("active",bi===i));
-  if(i===0) setTimeout(()=>drawMainCharts(id), 80);
-  else setTimeout(()=>drawHistoryCharts(id), 80);
+  setTimeout(()=>drawMainCharts(id), 50);
 }
 
 function renderRptMain(id,md){
@@ -2403,21 +2548,20 @@ function renderRptMain(id,md){
   <div class="rpt-wrap">
     <!-- ══ 헤더 ══ -->
     <div class="rpt2-header" style="padding:16px 22px;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
-        <img src="${LOGO}" alt="Petamus" style="width:50px;height:50px;border-radius:50%;background:#fff;padding:3px;object-fit:contain;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="${LOGO}" alt="Petamus" style="width:40px;height:40px;border-radius:50%;background:#fff;padding:3px;object-fit:contain;flex-shrink:0">
         <div>
-          <div style="font-size:14px;font-weight:800;color:#C9A84C;letter-spacing:.8px">PETAMUS INTERNATIONAL · English Language Academy</div>
-          <div style="font-size:10px;color:rgba(255,255,255,.65);margin-top:2px;letter-spacing:1px">MONTHLY STUDENT PROGRESS REPORT</div>
+          <div style="font-size:12px;font-weight:800;color:#C9A84C;letter-spacing:.6px">PETAMUS INTERNATIONAL · English Language Academy</div>
+          <div style="font-size:9px;color:rgba(255,255,255,.65);margin-top:1px;letter-spacing:1px">MONTHLY STUDENT PROGRESS REPORT</div>
         </div>
       </div>
-      <div style="height:1px;background:rgba(201,168,76,.4);margin-bottom:12px"></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Student Name</div><div style="color:#fff;font-weight:700;font-size:14px">${s.name} <span style="font-weight:400;font-size:12px;color:rgba(255,255,255,.7)">(${s.ename})</span></div></div>
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Reporting Period</div><div style="color:#fff;font-weight:700;font-size:14px">${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</div></div>
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Level</div><div style="color:#fff;font-weight:700;font-size:14px">${s.level||CLS_LEVEL[s.cls]||"—"}</div></div>
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Grade</div><div style="color:#fff;font-weight:700;font-size:14px">${s.grade||"—"}</div></div>
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Class</div><div style="color:#fff;font-weight:700;font-size:14px">${s.cls}</div></div>
-        <div><div style="color:rgba(255,255,255,.55);font-size:10px;margin-bottom:2px">Homeroom Teacher</div><div style="color:#fff;font-weight:700;font-size:14px">${TCHR[s.cls]||"—"}</div></div>
+      <div style="height:1px;background:rgba(201,168,76,.4);margin-bottom:8px"></div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+        <div><div style="color:rgba(255,255,255,.55);font-size:9px;margin-bottom:1px">Student Name</div><div style="color:#fff;font-weight:700;font-size:12px">${s.name} <span style="font-weight:400;font-size:11px;color:rgba(255,255,255,.7)">(${s.ename})</span></div></div>
+        <div><div style="color:rgba(255,255,255,.55);font-size:9px;margin-bottom:1px">Reporting Period</div><div style="color:#fff;font-weight:700;font-size:12px">${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</div></div>
+        <div><div style="color:rgba(255,255,255,.55);font-size:9px;margin-bottom:1px">Grade</div><div style="color:#fff;font-weight:700;font-size:12px">${s.grade||"—"}</div></div>
+        <div><div style="color:rgba(255,255,255,.55);font-size:9px;margin-bottom:1px">Class</div><div style="color:#fff;font-weight:700;font-size:12px">${s.cls}</div></div>
+        <div style="grid-column:1/-1"><div style="color:rgba(255,255,255,.55);font-size:9px;margin-bottom:1px">Homeroom Teacher</div><div style="color:#fff;font-weight:700;font-size:12px">${TCHR[s.cls]||"—"}</div></div>
       </div>
     </div>
 
@@ -2429,19 +2573,17 @@ function renderRptMain(id,md){
         <thead>
           <colgroup>
             <col style="width:28%">
-            <col style="width:9%">
-            <col style="width:9%">
-            <col style="width:9%">
-            <col style="width:9%">
-            <col style="width:36%">
+            <col style="width:10%">
+            <col style="width:12%">
+            <col style="width:10%">
+            <col style="width:10%">
           </colgroup>
           <tr style="background:#1A3169;color:#C9A84C">
-            <th style="padding:7px 8px;text-align:left">Subject</th>
-            <th style="padding:7px 6px;text-align:center">Score</th>
-            <th style="padding:7px 6px;text-align:center">Grade</th>
-            <th style="padding:7px 6px;text-align:center">MoM</th>
-            <th style="padding:7px 6px;text-align:center">Max</th>
-            <th style="padding:7px 8px;text-align:left">Teacher's Comment</th>
+            <th style="padding:5px 8px;text-align:left">Subject</th>
+            <th style="padding:5px 6px;text-align:center">Score</th>
+            <th style="padding:5px 6px;text-align:center">Class Avg</th>
+            <th style="padding:5px 6px;text-align:center">Grade</th>
+            <th style="padding:5px 6px;text-align:center">MoM</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2452,25 +2594,26 @@ function renderRptMain(id,md){
     const grade=gradeLabel(pct);
     const bg=i%2===0?"#f8f9ff":"#fff";
     html+=`<tr style="background:${bg};border-bottom:1px solid #e8ecf2">
-      <td style="padding:8px 10px;font-weight:700;color:#1A3169">
+      <td style="padding:9px 10px;font-weight:700;color:#1A3169">
         ${subS.label}<div style="font-size:10px;color:#888;font-weight:400">${subS.full}</div>
       </td>
-      <td style="padding:8px 6px;text-align:center;font-weight:800;font-size:16px">${d.score||"—"}</td>
-      <td style="padding:8px 6px;text-align:center;font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#888"}">
+      <td style="padding:9px 8px;text-align:center;font-weight:800;font-size:15px">${d.score||"—"}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:700;font-size:13px">
+        ${(()=>{const vals=classStu(s.cls).map(st=>(((st.monthlyData||{})[curMonth]||{}).subjects||{})[subS.key]?.score).filter(v=>v>0);const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;if(avg===null)return'<span style="color:#ccc">—</span>';const color=d.score&&d.score>=avg?"#2e7d32":"#e65100";return`<span style="color:${color}">${avg}</span>`;})()}
+      </td>
+      <td style="padding:9px 8px;text-align:center;font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#888"}">
         ${grade}
       </td>
-      <td style="padding:8px 6px;text-align:center;font-size:12px">${momArrow(subS.key)}</td>
-      <td style="padding:8px 6px;text-align:center;color:#888">${d.max||100}</td>
-      <td style="padding:8px 10px;font-size:12px;color:#444">${d.comment||""}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:12px">${momArrow(subS.key)}</td>
     </tr>`;
   });
 
   if(overall!==null){
     html+=`<tr style="background:#1A3169;border-top:2px solid #C9A84C">
-      <td style="padding:8px 10px;color:#C9A84C;font-weight:800">OVERALL AVERAGE</td>
-      <td style="padding:8px 6px;text-align:center;color:#fff;font-weight:800;font-size:16px">${Math.round(overall)}%</td>
-      <td style="padding:8px 6px;text-align:center;color:#C9A84C;font-weight:800">${gradeLabel(Math.round(overall))}</td>
-      <td colspan="3" style="padding:8px 10px;color:rgba(255,255,255,.7);font-size:12px"></td>
+      <td style="padding:9px 10px;color:#C9A84C;font-weight:800">OVERALL AVERAGE</td>
+      <td style="padding:9px 8px;text-align:center;color:#fff;font-weight:800;font-size:15px">${Math.round(overall)}%</td>
+      <td style="padding:9px 8px;text-align:center;color:#C9A84C;font-weight:800">${gradeLabel(Math.round(overall))}</td>
+      <td colspan="3" style="padding:9px 8px;color:rgba(255,255,255,.7);font-size:11px"></td>
     </tr>`;
   }
 
@@ -2478,15 +2621,15 @@ function renderRptMain(id,md){
     </div>
 
     <!-- ══ SR TEST RESULTS ══ -->
-    ${renderRptSR(md)}
+    ${renderRptSR(id,md)}
 
     <!-- ══ PERFORMANCE ANALYSIS ══ -->
     <div class="rpt2-section" style="break-inside:avoid;page-break-inside:avoid">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
-      <div style="position:relative;height:220px;margin-bottom:10px"><canvas id="rpt-main-bar"></canvas></div>
-      <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
-        <div style="position:relative;height:210px"><canvas id="rpt-main-radar"></canvas></div>
-        <div style="position:relative;height:210px"><canvas id="rpt-main-progress"></canvas></div>
+      <div style="position:relative;height:265px;margin-bottom:10px"><canvas id="rpt-main-bar"></canvas></div>
+      <div style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
+        <div style="position:relative;height:245px"><canvas id="rpt-main-radar"></canvas></div>
+        <div style="position:relative;height:245px"><canvas id="rpt-main-progress"></canvas></div>
       </div>
     </div>
   </div>`;
@@ -2497,12 +2640,13 @@ function renderRptMain(id,md){
   const savedBooks=md.books||[];
   const mergedBooks=clsBooks.length
     ? clsBooks.map(cb=>{
-        const saved=savedBooks.find(sb=>sb.title===cb.title)||{};
-        return {title:cb.title,totalUnits:cb.totalUnits||0,completedUnits:saved.completedUnits||0,
-                pct:cb.totalUnits>0?Math.round((saved.completedUnits||0)/cb.totalUnits*100):0};
+        const saved=savedBooks.find(sb=>sb.title===cb.title);
+        const completedUnits=saved?saved.completedUnits:(cb.completedUnits||0);
+        return {title:cb.title,totalUnits:cb.totalUnits||0,completedUnits,
+                pct:cb.totalUnits>0?Math.round(completedUnits/cb.totalUnits*100):0};
       })
     : savedBooks;
-  html+=renderRptBooks(mergedBooks);
+  html+=renderRptBooks(mergedBooks,md.arBooks||0);
   html+=renderRptComment(id,md);
   return html;
 }
@@ -2514,7 +2658,7 @@ function renderRptEval(ev){
   const maxTotal=EVAL_DOMAINS.length*5;
   const pct=maxTotal>0?Math.round(total/maxTotal*100):0;
 
-  let html=`<div class="rpt-wrap"><div class="rpt2-section">
+  let html=`<div class="rpt-wrap"><div class="rpt2-section" style="break-before:page;page-break-before:always">
     <div class="rpt2-section-title">⭐ ATTITUDE & PARTICIPATION · ★ = 1 pt (5 pts max per category)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">`;
 
@@ -2543,32 +2687,45 @@ function renderRptEval(ev){
 }
 
 
-function renderRptSR(md){
+function renderRptSR(id,md){
+  const s=students[id];
   const sr=md.sr||{};
-  if(!sr.ss&&!sr.pr) return "";
-  return '<div class="rpt-wrap"><div class="rpt2-section">'
-    +'<div class="rpt2-section-title">📋 SR TEST RESULTS</div>'
-    +'<div style="font-size:11px;color:#888;margin-bottom:8px">SR Test Date: <b style="color:#C9A84C">'+(sr.date||"—")+'</b></div>'
-    +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
-    +'<thead><tr style="background:#1A3169;color:#C9A84C">'
-    +'<th style="padding:6px 8px;text-align:center">Scale Score (SS)</th>'
-    +'<th style="padding:6px 8px;text-align:center">Percentile Rank (PR)</th>'
-    +'<th style="padding:6px 8px;text-align:center">Grade Equiv. (GE)</th>'
-    +'<th style="padding:6px 8px;text-align:center">IRL</th>'
-    +'<th style="padding:6px 8px;text-align:center">Est. ORF</th>'
-    +'</tr></thead>'
-    +'<tbody><tr style="background:#f8f9ff;text-align:center">'
-    +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.ss||"—")+'</td>'
-    +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.pr||"—")+'</td>'
-    +'<td style="padding:8px;font-weight:700">'+(sr.ge||"—")+'</td>'
-    +'<td style="padding:8px;font-weight:700">'+(sr.irl||"—")+'</td>'
-    +'<td style="padding:8px;font-weight:700">'+(sr.orf||"—")+'</td>'
-    +'</tr></tbody></table>'
-    +(sr.zpd?'<div style="margin-top:8px;font-size:12px;color:#333">Reading Recommendation ZPD: <b style="color:#1A3169">'+sr.zpd+'</b></div>':"")
-    +'</div></div>';
+  const mds=s.monthlyData||{};
+  // 월별 GE 데이터
+  const months=Object.keys(mds).sort();
+  const geData=months.map(m=>{ const v=parseFloat((mds[m]?.sr?.ge)||""); return isNaN(v)?null:v; });
+  const hasChart=geData.some(v=>v!==null);
+
+  if(!sr.ss&&!sr.pr&&!hasChart) return "";
+
+  let html='<div class="rpt-wrap"><div class="rpt2-section"><div class="rpt2-section-title">📋 SR TEST RESULTS</div>';
+
+  if(sr.ss||sr.pr){
+    html+='<div style="font-size:11px;color:#888;margin-bottom:8px">SR Test Date: <b style="color:#C9A84C">'+(sr.date||"—")+'</b></div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="background:#1A3169;color:#C9A84C">'
+      +'<th style="padding:6px 8px;text-align:center">Scale Score (SS)</th>'
+      +'<th style="padding:6px 8px;text-align:center">Percentile Rank (PR)</th>'
+      +'<th style="padding:6px 8px;text-align:center">Grade Equiv. (GE)</th>'
+      +'<th style="padding:6px 8px;text-align:center">IRL</th>'
+      +'</tr></thead>'
+      +'<tbody><tr style="background:#f8f9ff;text-align:center">'
+      +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.ss||"—")+'</td>'
+      +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.pr||"—")+'</td>'
+      +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.ge||"—")+'</td>'
+      +'<td style="padding:8px;font-weight:800;font-size:15px">'+(sr.irl||"—")+'</td>'
+      +'</tr></tbody></table>';
+  }
+
+  if(hasChart){
+    // 차트는 NOTICE 이후 별도 섹션에 렌더링
+  }
+
+  html+='</div></div>';
+  return html;
 }
-function renderRptBooks(books){
-  if(!books.length)return"";
+function renderRptBooks(books,arBooks){
+  if(!books.length&&!arBooks)return"";
   let html=`<div class="rpt-wrap"><div class="rpt2-section">
     <div class="rpt2-section-title">📚 MONTHLY CURRICULUM PROGRESS</div>`;
   books.forEach((b,i)=>{
@@ -2591,6 +2748,13 @@ function renderRptBooks(books){
       </div>
     </div>`;
   });
+  if(arBooks){
+    html+=`<div style="margin-top:12px;padding:10px 14px;background:#f0f4ff;border-radius:8px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">📖</span>
+      <span style="font-size:13px;font-weight:600;color:#1A3169">AR READING</span>
+      <span style="font-size:16px;font-weight:800;color:#1A3169;margin-left:auto">${arBooks}권</span>
+    </div>`;
+  }
   html+=`</div></div>`;
   return html;
 }
@@ -2604,32 +2768,30 @@ function renderRptComment(id,md){
   const tcmtAt=md.teacherCommentAt?md.teacherCommentAt.slice(0,10):"";
   const acmtAt=md.adminCommentAt?md.adminCommentAt.slice(0,10):"";
   let html=`<div class="rpt-wrap"><div class="rpt2-section">
-    <div class="rpt2-section-title">💬 담임 선생님 코멘트</div>`;
+    <div class="rpt2-section-title">💬 TEACHER'S OVERALL COMMENT</div>
+    <div class="bubble-wrap">`;
   if(tcmt){
-    html+=`<div class="rpt2-comment-card">
-      <div class="rpt2-comment-who">
-        <div class="stu-avatar" style="background:${CLS_COLOR[cls]};width:32px;height:32px;font-size:13px;flex-shrink:0">${teacherName[0]}</div>
-        <div>
-          <div style="font-weight:700;font-size:13px;color:#1A3169">${teacherName}</div>
-          ${tcmtAt?`<div style="font-size:11px;color:#888">${tcmtAt}</div>`:""}
-        </div>
+    html+=`<div class="bubble-row">
+      <div class="bubble-avatar navy">🏫</div>
+      <div class="bubble-content">
+        <div class="bubble-name">Homeroom Teacher · ${teacherName}</div>
+        <div class="bubble-box navy">${tcmt.replace(/\n/g,"<br>")}</div>
+        ${tcmtAt?`<div class="bubble-date">${tcmtAt}</div>`:""}
       </div>
-      <div class="rpt2-comment-body">${tcmt.replace(/\n/g,"<br>")}</div>
     </div>`;
   }
   if(acmt){
-    html+=`<div class="rpt2-comment-card" style="border-left-color:#C9A84C;margin-top:10px">
-      <div class="rpt2-comment-who">
-        <div class="stu-avatar" style="background:#C9A84C;width:32px;height:32px;font-size:13px;flex-shrink:0;color:#1A3169">원</div>
-        <div>
-          <div style="font-weight:700;font-size:13px;color:#1A3169">원장</div>
-          ${acmtAt?`<div style="font-size:11px;color:#888">${acmtAt}</div>`:""}
-        </div>
+    html+=`<div class="bubble-row right">
+      <div class="bubble-avatar gold">👑</div>
+      <div class="bubble-content">
+        <div class="bubble-name">Head Teacher</div>
+        <div class="bubble-box gold">${acmt.replace(/\n/g,"<br>")}</div>
+        ${acmtAt?`<div class="bubble-date">${acmtAt}</div>`:""}
       </div>
-      <div class="rpt2-comment-body" style="background:#fffdf0">${acmt.replace(/\n/g,"<br>")}</div>
     </div>`;
   }
   if(!tcmt&&!acmt)html+=`<div style="color:#aaa;font-size:13px;padding:12px 0">작성된 코멘트가 없습니다</div>`;
+  html+=`</div>`;
   // 푸터
   // 서명란
   // 서명 이미지 키 결정 (반 이름 or tchrId)
@@ -2643,34 +2805,27 @@ function renderRptComment(id,md){
     <div class="rpt2-section" style="margin-top:0">
       <div class="rpt2-section-title">✍️ CONFIRMATION & SIGNATURES</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <!-- 담임 서명: 자동 표시 -->
+        <!-- 담임 서명 -->
         <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px">
           <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Homeroom Teacher</div>
-          <div style="height:48px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #ddd;margin-bottom:8px">
-            ${tchrSignImg
-              ?`<img src="${tchrSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`
-              :`<div style="width:100%;height:1px;background:#ccc"></div>`}
+          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px;display:flex;align-items:center;justify-content:center">
+            ${tchrSignImg?`<img src="${tchrSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`:""}
           </div>
-          <div style="font-size:11px;color:#555">${TCHR[cls]||"담임 선생님"}</div>
+          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
         </div>
-        <!-- 원장 서명: 관리자 클릭 삽입 -->
+        <!-- Head Teacher 서명: 빈칸 -->
+        <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px">
+          <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Head Teacher</div>
+          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px"></div>
+          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
+        </div>
+        <!-- Academy Director 서명: 관리자 삽입 -->
         <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px" id="dir-sign-box">
           <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Academy Director</div>
-          <div style="height:48px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #ddd;margin-bottom:8px" id="dir-sign-area">
-            ${adminSignImg
-              ?`<img src="${adminSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`
-              :(isAdmin?`<button onclick="insertAdminSign('${id}')" class="no-print"
-                  style="background:#f0f7ff;color:#1565C0;border:1px dashed #90caf9;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px">
-                  + 서명 삽입
-                </button>`:`<div style="width:100%;height:1px;background:#ccc"></div>`)}
+          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px;display:flex;align-items:center;justify-content:center" id="dir-sign-area">
+            ${adminSignImg?`<img src="${adminSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`:`<span></span>`}
           </div>
-          <div style="font-size:11px;color:#555">원장</div>
-        </div>
-        <!-- 학부모 서명: 빈칸 -->
-        <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px">
-          <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Parent / Guardian</div>
-          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px"></div>
-          <div style="font-size:11px;color:#888">서명</div>
+          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
         </div>
       </div>
     </div>
@@ -2683,6 +2838,16 @@ function renderRptComment(id,md){
     html+=`<div class="rpt-wrap"><div class="rpt2-section">
       <div class="rpt2-section-title">📢 NOTICE · ${nextMo}월 안내</div>
       <div style="font-size:13px;line-height:1.9;color:#333;white-space:pre-wrap">${globalNotice.replace(/</g,"&lt;")}</div>
+    </div></div>`;
+  }
+
+  // ── SR 월별 추이 차트 (맨 마지막, 푸터 바로 앞) ──
+  const allMonthsForTrend=Object.keys(s.monthlyData||{}).sort();
+  const hasSrTrend=allMonthsForTrend.some(m=>{ const v=parseFloat(((s.monthlyData[m]?.sr?.ge)||"")); return !isNaN(v); });
+  if(hasSrTrend){
+    html+=`<div class="rpt-wrap"><div class="rpt2-section">
+      <div class="rpt2-section-title">📈 MONTHLY SR SCORE TREND</div>
+      <div style="position:relative;height:200px"><canvas id="rpt-sr-trend"></canvas></div>
     </div></div>`;
   }
 
@@ -2700,14 +2865,9 @@ function renderRptGraph(id){
   return `
   <div class="rpt-wrap">
     <div class="rpt2-section">
-      <div class="rpt2-section-title">📈 과목별 월별 성적 추이 — ${s.name} (${s.ename})</div>
-      <canvas id="rpt-chart-history-score" height="160"></canvas>
+      <div class="rpt2-section-title">📋 SR TEST RESULTS · Monthly Score Trend — ${s.name} (${s.ename})</div>
+      <canvas id="rpt-chart-history-score" height="200"></canvas>
     </div>
-    <div class="rpt2-section">
-      <div class="rpt2-section-title">📊 과목별 월별 반 평균 비교</div>
-      <canvas id="rpt-chart-history-eval" height="140"></canvas>
-    </div>
-
   </div>`;
 }
 
@@ -2750,8 +2910,8 @@ function drawMainCharts(id){
       ]
     },options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        title:{display:true,text:"Subject Scores vs. Class Average",font:{size:12,weight:"bold"},color:"#333",padding:{bottom:8}},
-        legend:{position:"top",align:"end",labels:{boxWidth:12,font:{size:10},padding:8}},
+        title:{display:true,text:"Subject Scores vs. Class Average",font:{size:12,weight:"bold"},color:"#333",padding:{top:2,bottom:4}},
+        legend:{position:"top",align:"end",labels:{boxWidth:10,font:{size:9},padding:4}},
         datalabels:{display:false}
       },
       scales:{
@@ -2781,10 +2941,11 @@ function drawMainCharts(id){
         {label:"Class Average",data:radarClassAvg,backgroundColor:"rgba(201,168,76,.15)",borderColor:"#C9A84C",borderWidth:1.5,borderDash:[4,3],pointRadius:2,pointBackgroundColor:"#C9A84C"}
       ]
     },options:{responsive:true,maintainAspectRatio:false,
-      scales:{r:{min:0,max:100,ticks:{display:false,stepSize:20},grid:{color:"#e0e0e0"},angleLines:{color:"#ddd"},pointLabels:{font:{size:9,weight:"600"},color:"#333"}}},
+      layout:{padding:{top:2,bottom:2,left:2,right:2}},
+      scales:{r:{min:0,max:100,ticks:{display:false,stepSize:20},grid:{color:"#e0e0e0"},angleLines:{color:"#ddd"},pointLabels:{font:{size:10,weight:"600"},color:"#333"}}},
       plugins:{
-        title:{display:true,text:"Competency Radar",font:{size:11,weight:"bold"},color:"#333",padding:{bottom:4}},
-        legend:{position:"bottom",labels:{boxWidth:10,font:{size:9},padding:4}}
+        title:{display:false},
+        legend:{position:"bottom",labels:{boxWidth:8,font:{size:8},padding:2}}
       }}});
   }
   if(mainProgress&&window.Chart){
@@ -2838,9 +2999,11 @@ function drawMainCharts(id){
           const sign=diff>=0?"+":"";
           const color=diff>=0?"#2e7d32":"#c0392b";
           ctx.fillText(hPersonal[i],xPos+6,y.getPixelForValue(i)+4);
-          ctx.fillStyle=color;
-          ctx.font="9px sans-serif";
-          ctx.fillText(`(${sign}${diff} vs avg)`,xPos+22,y.getPixelForValue(i)+4);
+          if(diff>0){
+            ctx.fillStyle="#2e7d32";
+            ctx.font="9px sans-serif";
+            ctx.fillText(`(+${diff} vs avg)`,xPos+22,y.getPixelForValue(i)+4);
+          }
           ctx.restore();
         });
       }
@@ -2848,16 +3011,16 @@ function drawMainCharts(id){
     new Chart(mainProgress,{type:"bar",data:{
       labels:hLabels,
       datasets:[
-        {label:"Student Score",data:hPersonal,backgroundColor:"#1A3169",borderColor:"#1A3169",borderWidth:0,borderRadius:2,barPercentage:0.55},
-        {label:"Class Avg (background)",data:hClassAvg,backgroundColor:"rgba(201,168,76,.2)",borderColor:"transparent",borderWidth:0,borderRadius:2,barPercentage:0.55}
+        {label:"Student Score",data:hPersonal,backgroundColor:"#1A3169",borderColor:"#1A3169",borderWidth:0,borderRadius:2,barPercentage:0.65},
+        {label:"Class Avg (background)",data:hClassAvg,backgroundColor:"rgba(201,168,76,.2)",borderColor:"transparent",borderWidth:0,borderRadius:2,barPercentage:0.65}
       ]
     },options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,
       plugins:{
-        title:{display:true,text:"Score Distribution vs. Class Average",font:{size:11,weight:"bold"},color:"#333",padding:{bottom:4}},
+        title:{display:false},
         legend:{
           position:"bottom",
           labels:{
-            boxWidth:10,font:{size:9},padding:6,
+            boxWidth:8,font:{size:8},padding:3,
             generateLabels:(chart)=>[
               {text:"Student Score",fillStyle:"#1A3169",strokeStyle:"#1A3169",lineWidth:1},
               {text:"Class Average (marker)",fillStyle:"#C9A84C",strokeStyle:"#C9A84C",lineWidth:2,lineDash:[]}
@@ -2868,19 +3031,78 @@ function drawMainCharts(id){
           label:(ctx)=>{
             if(ctx.datasetIndex===0){
               const diff=hDiff[ctx.dataIndex];
-              const sign=diff>=0?"+":"";
-              return ` ${ctx.label}: ${ctx.raw} (${sign}${diff} vs avg)`;
+              const diffStr=diff>0?` (+${diff} vs avg)`:"";
+              return ` ${ctx.label}: ${ctx.raw}${diffStr}`;
             }
             return null;
           }
         }}
       },
-      layout:{padding:{right:80}},
+      layout:{padding:{right:40,top:2,bottom:2}},
       scales:{
         x:{min:0,max:100,ticks:{font:{size:9}},grid:{color:"#f0f0f0"}},
-        y:{ticks:{font:{size:10,weight:"600"}},grid:{display:false}}
+        y:{ticks:{font:{size:11,weight:"600"}},grid:{display:false}}
       }
     },plugins:[vLinePlugin]});
+  }
+
+  // ── SR 월별 추이 차트 ──
+  const srTrendEl=document.getElementById("rpt-sr-trend");
+  if(srTrendEl&&window.Chart){
+    if(Chart.getChart(srTrendEl)) Chart.getChart(srTrendEl).destroy();
+    const allMonths=Object.keys(mds).sort();
+    // SR GE 데이터가 있는 월만 필터링
+    const srMonths=allMonths.filter(m=>{ const v=parseFloat((mds[m]?.sr?.ge)||""); return !isNaN(v); });
+    const srLabels=srMonths.map(m=>m.slice(2).replace("-","/"));
+    const srGe=srMonths.map(m=>parseFloat((mds[m]?.sr?.ge)||""));
+    const validCount=srGe.length;
+
+    // 막대 위 숫자 표시 플러그인
+    const barLabelPlugin={
+      id:"barLabelPlugin",
+      afterDatasetsDraw(chart){
+        const{ctx,scales:{x,y}}=chart;
+        chart.getDatasetMeta(0).data.forEach((bar,i)=>{
+          const val=srGe[i];
+          if(val===null) return;
+          ctx.save();
+          ctx.fillStyle="#1A3169";
+          ctx.font="bold 12px sans-serif";
+          ctx.textAlign="center";
+          ctx.fillText(val.toFixed(1), bar.x, bar.y-6);
+          ctx.restore();
+        });
+      }
+    };
+
+    const datasets=[
+      {type:"bar",label:"SR",data:srGe,backgroundColor:"rgba(26,49,105,.2)",borderColor:"#1A3169",borderWidth:1.5,borderRadius:4,spanGaps:true,order:2}
+    ];
+    // 데이터가 2개 이상일 때만 꺾은선 추가
+    if(validCount>=2){
+      datasets.push({
+        type:"line",label:"SR Trend",data:srGe,borderColor:"#C9A84C",backgroundColor:"transparent",borderWidth:2.5,
+        pointRadius:5,pointBackgroundColor:"#fff",pointBorderColor:"#C9A84C",pointBorderWidth:2,
+        tension:.35,spanGaps:true,order:1
+      });
+    }
+
+    new Chart(srTrendEl,{
+      type:"bar",
+      data:{labels:srLabels,datasets},
+      options:{responsive:true,maintainAspectRatio:false,spanGaps:true,
+        layout:{padding:{top:24,bottom:2}},
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:i=>i.dataset.type==="line"?null:` SR GE: ${i.raw??"—"}`}}
+        },
+        scales:{
+          y:{title:{display:true,text:"Grade Equivalent",font:{size:9}},ticks:{font:{size:9},callback:v=>v.toFixed(1)},grid:{color:"#f0f0f0"},suggestedMin:0},
+          x:{ticks:{font:{size:10}},grid:{display:false}}
+        }
+      },
+      plugins:[barLabelPlugin]
+    });
   }
 
 } // drawMainCharts 끝
@@ -2888,92 +3110,61 @@ function drawMainCharts(id){
 // ── 탭1: 누적 그래프 차트 (반드시 display:block 상태에서 호출) ──
 function drawHistoryCharts(id){
   const s=students[id];
-  const cls=s?.cls||"";
   const mds=s.monthlyData||{};
   const months=Object.keys(mds).sort();
   const labels=months.map(m=>m.slice(2).replace("-","/"));
   if(!window.Chart) return;
-  ["rpt-chart-history-score","rpt-chart-history-eval"].forEach(cid=>{
-    const el=document.getElementById(cid);
-    if(el && Chart.getChart(el)) Chart.getChart(el).destroy();
-  });
 
-  // 데이터 확인
-  const hasData=months.some(m=>SUBJECTS.some(sub=>{
-    const d=(mds[m]?.subjects||{})[sub.key]||{};
-    return d.score&&d.max;
-  }));
-  if(!months.length||!hasData){
-    ["rpt-chart-history-score","rpt-chart-history-eval"].forEach(cid=>{
-      const el=document.getElementById(cid);
-      if(el){
-        const ctx=el.getContext("2d");
-        ctx.clearRect(0,0,el.width,el.height);
-        ctx.fillStyle="#aaa";ctx.font="13px sans-serif";ctx.textAlign="center";
-        ctx.fillText("성적 데이터가 없습니다",el.width/2||200,80);
-      }
-    });
+  const el=document.getElementById("rpt-chart-history-score");
+  if(el && Chart.getChart(el)) Chart.getChart(el).destroy();
+
+  // GE 데이터만 추출
+  const geData=months.map(m=>{
+    const ge=(mds[m]?.sr?.ge)||null;
+    // GE는 "3.6" 같은 문자열일 수 있으므로 float 변환
+    const v=parseFloat(ge);
+    return isNaN(v)?null:v;
+  });
+  const hasAny=geData.some(v=>v!==null);
+
+  if(!el) return;
+
+  if(!months.length||!hasAny){
+    const ctx=el.getContext("2d");
+    ctx.clearRect(0,0,el.width,el.height);
+    ctx.fillStyle="#aaa";ctx.font="13px sans-serif";ctx.textAlign="center";
+    ctx.fillText("SR GE 데이터가 없습니다",el.width/2||200,100);
     return;
   }
 
-  const subjColors=["#1A3169","#C9A84C","#2E7D32","#E65100","#6A1B9A"];
-
-  // ── 차트1: 과목별 월별 막대+꺾은선 혼합 ──
-  const mixedDS=[];
-  SUBJECTS.forEach((sub,i)=>{
-    const vals=months.map(m=>{
-      const d=(mds[m]?.subjects||{})[sub.key]||{};
-      return d.score&&d.max?Math.round(d.score/d.max*100):null;
-    });
-    if(vals.some(v=>v!==null)){
-      mixedDS.push({type:"bar",label:sub.label,data:vals,
-        backgroundColor:subjColors[i]+"55",borderColor:subjColors[i],borderWidth:1.5,borderRadius:4,spanGaps:true,order:2});
-      mixedDS.push({type:"line",label:sub.label+" 추세",data:vals,
-        borderColor:subjColors[i],backgroundColor:"transparent",borderWidth:2.5,
-        pointRadius:4,pointBackgroundColor:"#fff",pointBorderColor:subjColors[i],pointBorderWidth:2,
-        pointHoverRadius:6,tension:.35,spanGaps:true,order:1});
-    }
-  });
-  const elScore=document.getElementById("rpt-chart-history-score");
-  if(elScore) new Chart(elScore,{
-    type:"bar",data:{labels,datasets:mixedDS},
-    options:{responsive:true,spanGaps:true,
-      plugins:{legend:{position:"bottom",labels:{boxWidth:12,font:{size:11},
-        filter:item=>!item.text.includes("추세")}},
-        tooltip:{callbacks:{title:i=>i[0].label+"월",
-          label:i=>i.dataset.type==="line"?null:` ${i.dataset.label}: ${i.raw??"-"}%`}}},
-      scales:{y:{min:0,max:100,ticks:{callback:v=>v+"%",font:{size:10}},grid:{color:"#f0f0f0"}},
-              x:{ticks:{font:{size:10}},grid:{display:false}}}}
-  });
-
-  // ── 차트2: 개인 전체 평균 vs 반 평균 ──
-  const personalAvg=months.map(m=>{
-    const vals=SUBJECTS.map(sub=>{const d=(mds[m]?.subjects||{})[sub.key]||{};return d.score&&d.max?d.score/d.max*100:null;}).filter(v=>v!==null);
-    return vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;
-  });
-  const classAvg=months.map(m=>{
-    const stus=classStu(cls);const all=[];
-    stus.forEach(st=>SUBJECTS.forEach(sub=>{
-      const d=((st.monthlyData||{})[m]?.subjects||{})[sub.key]||{};
-      if(d.score&&d.max) all.push(d.score/d.max*100);
-    }));
-    return all.length?Math.round(all.reduce((a,b)=>a+b,0)/all.length):null;
-  });
-  const elEval=document.getElementById("rpt-chart-history-eval");
-  if(elEval) new Chart(elEval,{
-    type:"bar",data:{labels,datasets:[
-      {type:"bar",label:"Individual Avg / 개인평균",data:personalAvg,backgroundColor:"#1A316955",borderColor:"#1A3169",borderWidth:1.5,borderRadius:4,order:2},
-      {type:"bar",label:"Class Avg / 반평균",data:classAvg,backgroundColor:"#C9A84C44",borderColor:"#C9A84C",borderWidth:1.5,borderRadius:4,order:2},
-      {type:"line",label:"Individual Trend",data:personalAvg,borderColor:"#1A3169",backgroundColor:"transparent",borderWidth:2.5,
-        pointRadius:4,pointBackgroundColor:"#fff",pointBorderColor:"#1A3169",pointBorderWidth:2,tension:.35,spanGaps:true,order:1},
-      {type:"line",label:"Class Trend",data:classAvg,borderColor:"#C9A84C",backgroundColor:"transparent",borderWidth:2,
-        borderDash:[6,3],pointRadius:3,tension:.35,spanGaps:true,order:1}
+  new Chart(el,{
+    type:"bar",
+    data:{labels,datasets:[
+      {type:"bar",label:"Grade Equivalent (GE)",data:geData,
+        backgroundColor:"#1A316955",borderColor:"#1A3169",borderWidth:1.5,borderRadius:4,
+        spanGaps:true,order:2},
+      {type:"line",label:"GE Trend",data:geData,
+        borderColor:"#1A3169",backgroundColor:"transparent",borderWidth:2.5,
+        pointRadius:5,pointBackgroundColor:"#fff",pointBorderColor:"#1A3169",pointBorderWidth:2,
+        tension:.35,spanGaps:true,order:1,
+        datalabels:{display:true}}
     ]},
     options:{responsive:true,spanGaps:true,
-      plugins:{legend:{position:"bottom",labels:{boxWidth:12,font:{size:11},filter:item=>!item.text.includes("추세")}},
-        tooltip:{callbacks:{label:i=>i.dataset.type==="line"?null:` ${i.dataset.label}: ${i.raw??"-"}%`}}},
-      scales:{y:{min:0,max:100,ticks:{callback:v=>v+"%",font:{size:10}},grid:{color:"#f0f0f0"}},
-              x:{ticks:{font:{size:10}},grid:{display:false}}}}
+      plugins:{
+        legend:{position:"bottom",labels:{boxWidth:12,font:{size:11},
+          filter:item=>!item.text.includes("Trend")}},
+        tooltip:{callbacks:{
+          label:i=>i.dataset.type==="line"?null:` GE: ${i.raw??"-"}`
+        }}
+      },
+      scales:{
+        y:{title:{display:true,text:"Grade Equivalent",font:{size:10}},
+          ticks:{font:{size:11},callback:v=>v.toFixed(1)},
+          grid:{color:"#f0f0f0"},
+          suggestedMin:0},
+        x:{ticks:{font:{size:11}},grid:{display:false}}
+      }
+    }
   });
 }
 
@@ -3036,7 +3227,7 @@ async function deleteNotice(id){
 async function saveComment(id,who){
   const val=document.getElementById(who==="teacher"?"tcmt":"acmt")?.value||"";
   if(!val.trim()){showToast("내용을 입력하세요");return;}
-  const label=who==="teacher"?"담임":"관리자";
+  const label=who==="teacher"?"담임":"Head Teacher";
   const preview=val.length>60?val.slice(0,60)+"...":val;
   confirmSavePopup(`💬 ${label} 코멘트 저장`,[
     `<span style="color:var(--gray);font-size:12px;white-space:pre-wrap">${preview.replace(/</g,"&lt;")}</span>`
@@ -3131,10 +3322,10 @@ function renderSharedReport(s,md,month){
 
     +"</div></div>"
     +(evalRows?"<div class='card'><h3>🎯 영역별 평가</h3><table><tbody>"+evalRows+"</tbody></table></div>":"")
-    +(books?"<div class='card'><h3>📚 진도 현황</h3>"+books+"</div>":"")
+    +(books?"<div class='card'><h3>📚 MONTHLY CURRICULUM PROGRESS</h3>"+books+"</div>":"")
     +(tcmt||acmt?"<div class='card'><h3>💬 코멘트</h3>"
       +(tcmt?"<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px'><div style='background:#1A3169;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'>"+teacherName[0]+"</div><div style='font-size:12px;font-weight:700;color:#1A3169'>"+teacherName+"</div></div><div class='comment-box' style='background:#f8f9ff;border-color:#c0d0f0'>"+tcmt.split("\n").join("<br>")+"</div>":"")
-      +(acmt?"<div style='display:flex;align-items:center;gap:8px;margin:12px 0 8px'><div style='background:#1A3169;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'>관</div><div style='font-size:12px;font-weight:700;color:#1A3169'>관리자</div></div><div class='comment-box'>"+acmt.split("\n").join("<br>")+"</div>":"")
+      +(acmt?"<div style='display:flex;align-items:center;gap:8px;margin:12px 0 8px'><div style='background:#C9A84C;color:#1A3169;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'>HT</div><div style='font-size:12px;font-weight:700;color:#1A3169'>Head Teacher</div></div><div class='comment-box'>"+acmt.split("\n").join("<br>")+"</div>":"")
       +"</div>":"")
     +"<div class='footer'>Petamus International · 031-778-7369</div></body></html>";
 }
@@ -3172,8 +3363,8 @@ async function renderDash(){
       <td style="padding:8px;text-align:center">
         <span style="color:${done===stus.length?"var(--green)":"var(--gray)"}">${done}/${stus.length}</span>
       </td>
-      <td style="padding:8px;text-align:center;font-weight:700;color:var(--navy)">${avgSr!==null?avgSr+"%":"—"}</td>
-      <td style="padding:8px;text-align:center;font-weight:700;color:var(--gold)">${avgCt!==null?avgCt+"%":"—"}</td>
+      <td style="padding:8px;text-align:center;font-weight:700;color:var(--navy)">${avgSr!==null?avgSr:"—"}</td>
+      <td style="padding:8px;text-align:center;font-weight:700;color:var(--gold)">${avgCt!==null?avgCt:"—"}</td>
     </tr>`;
   });
   html+=`</tbody></table></div>
@@ -3182,12 +3373,12 @@ async function renderDash(){
   document.getElementById("main").innerHTML=html;
   if(window.Chart){
     const labels=CLS.map(c=>c);
-    const srData=CLS.map(c=>getClassAvg(c,"sr")||0);
     const ctData=CLS.map(c=>getClassAvg(c,"curr")||0);
-    new Chart(document.getElementById("dash-chart"),{type:"bar",data:{labels,datasets:[
-      {label:"SR 평균%",data:srData,backgroundColor:"#1A316988"},
-      {label:"커리 평균%",data:ctData,backgroundColor:"#C9A84C88"}
-    ]},options:{scales:{y:{min:0,max:100}},plugins:{legend:{position:"bottom"}}}});
+    const el=document.getElementById("dash-chart");
+    if(Chart.getChart(el)) Chart.getChart(el).destroy();
+    new Chart(el,{type:"bar",data:{labels,datasets:[
+      {label:"커리 평균%",data:ctData,backgroundColor:"#C9A84C88",borderColor:"#C9A84C",borderWidth:1.5,borderRadius:4}
+    ]},options:{scales:{y:{min:0,max:100,ticks:{callback:v=>v+"%"}}},plugins:{legend:{display:false}}}});
   }
 }
 
@@ -3206,7 +3397,7 @@ function renderStus(){
         color:${stuTab===0?'#1A3169':'#888'}">재원생 (${Object.values(students).filter(s=>s.status!=='withdrawn').length}명)</div>
       <div onclick="stuTab=1;renderStus()" style="padding:8px 18px;cursor:pointer;font-size:13px;font-weight:600;
         border-bottom:${stuTab===1?'3px solid #c0392b':'3px solid transparent'};
-        color:${stuTab===1?'#c0392b':'#888'}">탈원생 (${withdrawnList.length}명)</div>
+        color:${stuTab===1?'#c0392b':'#888'}">퇴원생 (${withdrawnList.length}명)</div>
     </div>
     <div class="search-wrap" style="margin-bottom:12px">
       <input type="text" id="stu-search" placeholder="🔍 이름 검색..." oninput="filterStus();toggleClear('stu-search','stu-clear')"
@@ -3224,19 +3415,19 @@ function filterStus(){
   if(!el)return;
 
   if(stuTab===1){
-    // 탈원생 목록
+    // 퇴원생 목록
     const stus=Object.values(students)
       .filter(s=>s.status==="withdrawn"&&(!q||s.name.includes(q)||(s.ename||"").toLowerCase().includes(q)))
       .sort((a,b)=>(b.withdrawnAt||"").localeCompare(a.withdrawnAt||""));
-    if(!stus.length){el.innerHTML='<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px">탈원생이 없습니다</div>';return;}
+    if(!stus.length){el.innerHTML='<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px">퇴원생이 없습니다</div>';return;}
     el.innerHTML=stus.map(s=>`
       <div class="stu-item" style="margin-bottom:4px;opacity:.85">
         <div class="stu-avatar" style="background:#aaa">${s.name[0]}</div>
         <div class="stu-info" style="flex:1">
           <div class="stu-name">${s.name} <span style="color:var(--gray);font-weight:400;font-size:11px">${s.ename||""}</span>
-            <span style="background:#fee;color:#c0392b;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">탈원</span>
+            <span style="background:#fee;color:#c0392b;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">퇴원</span>
           </div>
-          <div style="font-size:11px;color:var(--gray)">${s.cls||""}반 · ${s.grade||""} · 탈원일: ${s.withdrawnAt?s.withdrawnAt.slice(0,10):"미기록"}</div>
+          <div style="font-size:11px;color:var(--gray)">${s.cls||""}반 · ${s.grade||""} · 퇴원일: ${s.withdrawnAt?s.withdrawnAt.slice(0,10):"미기록"}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
           <button onclick="reinstatestu('${s.id}')" style="background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap">↩ 복원</button>
@@ -3312,7 +3503,7 @@ function openEditStu(id){
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost btn-sm" onclick="openTransferStuFromEdit('${id}',this)">🔄 반이동</button>
         ${(s.transferHistory&&s.transferHistory.length>0)?`<button class="btn btn-ghost btn-sm" onclick="showTransferHistory('${id}')">📋 이동이력</button>`:""}
-        <button class="btn btn-red btn-sm" onclick="withdrawStuFromEdit('${id}','${s.name}',this)">탈원</button>
+        <button class="btn btn-red btn-sm" onclick="withdrawStuFromEdit('${id}','${s.name}',this)">퇴원</button>
         <button class="btn btn-red btn-sm" style="background:#c0392b" onclick="this.closest('.overlay').remove();deleteStuPermanently('${id}','${s.name}')">🗑 삭제</button>
       </div>
       <div style="display:flex;gap:6px">
@@ -3552,11 +3743,32 @@ async function confirmTransfer(id){
   renderStus();
 }
 async function withdrawStu(id,name){
-  if(!confirm(name+" 학생을 탈원 처리하시겠습니까?\n탈원생 탭에서 언제든 복원할 수 있습니다."))return;
-  await db.ref("students/"+id).update({status:"withdrawn",withdrawnAt:new Date().toISOString()});
+  // 날짜 선택 팝업
+  const today=new Date().toISOString().slice(0,10);
+  const overlay=document.createElement("div");
+  overlay.className="overlay";
+  overlay.innerHTML=`<div class="modal" style="max-width:340px;text-align:center">
+    <h3 style="margin-bottom:12px">🎓 퇴원 처리</h3>
+    <p style="font-size:13px;color:#555;margin-bottom:14px"><b>${name}</b> 학생의 퇴원일을 선택해 주세요</p>
+    <input type="date" id="withdrawal-date-pick" value="${today}"
+      style="border:1px solid #C9A84C;border-radius:6px;padding:8px 12px;font-size:14px;font-weight:700;color:#1A3169;width:100%;margin-bottom:16px">
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-ghost" onclick="this.closest('.overlay').remove()">취소</button>
+      <button class="btn btn-red" onclick="confirmWithdraw('${id}','${name}',this)">퇴원 확인</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+async function confirmWithdraw(id,name,btn){
+  const dateVal=document.getElementById("withdrawal-date-pick")?.value;
+  if(!dateVal){showToast("퇴원일을 선택해 주세요");return;}
+  btn.disabled=true;
+  const withdrawnAt=new Date(dateVal+"T00:00:00").toISOString();
+  await db.ref("students/"+id).update({status:"withdrawn",withdrawnAt});
   await loadStudents();
-  showToast(name+" 탈원 처리 완료");
-  stuTab=0;
+  btn.closest(".overlay").remove();
+  showToast(name+" 퇴원 처리 완료 ("+dateVal+")");
+  stuTab=1;
   renderStus();
 }
 
@@ -3581,23 +3793,104 @@ async function deleteStuPermanently(id,name){
 
 // ── ADMIN: CONSULTATION ──
 let consSelId=null;
+function openConsForStu(id){
+  consSelId=id;
+  consMainTab=0;
+  curScr={name:"cons",params:{}};
+  updSB("cons");
+  renderCons();
+}
+let consMainTab=0;
 function renderCons(){
   let html=`<div class="card">
     <h3>💬 상담 관리</h3>
-    <div class="search-wrap" style="margin-bottom:8px">
-      <input type="text" placeholder="🔍 학생 이름 검색..." id="cons-search" oninput="searchCons();toggleClear('cons-search','cons-clear')"
-        style="width:100%;border:1px solid #d0d6e0;border-radius:6px;padding:8px 10px;font-size:13px">
-      <button id="cons-clear" class="search-clear" onclick="clearSearch('cons-search','cons-clear',()=>{searchCons();consSelId=null;document.getElementById('cons-detail').innerHTML='';document.getElementById('cons-hint').style.display='';})">✕</button>
-    </div>
-    <div id="cons-suggestions" style="border-radius:6px;max-height:220px;overflow-y:auto;display:none"></div>
-    <div id="cons-hint" style="text-align:center;padding:32px 0;color:var(--gray);font-size:13px">
-      <div style="font-size:28px;margin-bottom:8px">🔍</div>
-      학생 이름을 검색한 후 선택하면<br>상담 이력을 확인하고 등록할 수 있습니다
+    <div class="tab-bar" style="margin-bottom:0">
+      <button class="tab-btn${consMainTab===0?" active":""}" onclick="switchConsTab(0)">🔍 학생별 상담</button>
+      <button class="tab-btn${consMainTab===1?" active":""}" onclick="switchConsTab(1)">📋 전체 이력</button>
     </div>
   </div>
-  <div id="cons-detail"></div>`;
+  <div id="cons-tab-student" style="display:${consMainTab===0?"block":"none"}">
+    <div class="card" style="margin-top:12px">
+      <div class="search-wrap" style="margin-bottom:8px">
+        <input type="text" placeholder="🔍 학생 이름 검색..." id="cons-search" oninput="searchCons();toggleClear('cons-search','cons-clear')"
+          style="width:100%;border:1px solid #d0d6e0;border-radius:6px;padding:8px 10px;font-size:13px">
+        <button id="cons-clear" class="search-clear" onclick="clearSearch('cons-search','cons-clear',()=>{searchCons();consSelId=null;document.getElementById('cons-detail').innerHTML='';document.getElementById('cons-hint').style.display=''})">✕</button>
+      </div>
+      <div id="cons-suggestions" style="border-radius:6px;max-height:220px;overflow-y:auto;display:none"></div>
+      <div id="cons-hint" style="text-align:center;padding:32px 0;color:var(--gray);font-size:13px">
+        <div style="font-size:28px;margin-bottom:8px">🔍</div>
+        학생 이름을 검색한 후 선택하면<br>상담 이력을 확인하고 등록할 수 있습니다
+      </div>
+    </div>
+    <div id="cons-detail"></div>
+  </div>
+  <div id="cons-tab-feed" style="display:${consMainTab===1?"block":"none"}">
+    <div id="cons-feed-wrap"></div>
+  </div>`;
   document.getElementById("main").innerHTML=html;
-  if(consSelId)loadConsDetail(consSelId);
+  if(consMainTab===0){ if(consSelId) loadConsDetail(consSelId); }
+  else { loadConsFeed(1); }
+}
+function switchConsTab(i){
+  consMainTab=i;
+  const s=document.getElementById("cons-tab-student");
+  const f=document.getElementById("cons-tab-feed");
+  if(s) s.style.display=i===0?"block":"none";
+  if(f) f.style.display=i===1?"block":"none";
+  document.querySelectorAll(".tab-btn").forEach((b,bi)=>b.classList.toggle("active",bi===i));
+  if(i===1) loadConsFeed(1);
+}
+
+
+let consFeedPage=1;
+async function loadConsFeed(page){
+  consFeedPage=page;
+  const wrap=document.getElementById("cons-feed-wrap");
+  if(!wrap)return;
+  wrap.innerHTML=`<div style="text-align:center;padding:20px;color:var(--gray);font-size:13px">불러오는 중...</div>`;
+  // Firebase에서 전체 상담 데이터 로드
+  const snap=await db.ref("consultations").once("value");
+  const all=[];
+  snap.forEach(stuSnap=>{
+    const stuId=stuSnap.key;
+    const s=students[stuId];
+    if(!s)return;
+    // 담임은 본인 반만 (Fix #19)
+    if(user.role!=="admin"&&s.cls!==user.cls)return;
+    const list=stuSnap.val();
+    const items=Array.isArray(list)?list:Object.values(list||{});
+    items.forEach(c=>{if(c&&c.date)all.push({...c,stuId,stuName:s.name,stuEname:s.ename,cls:s.cls});});
+  });
+  all.sort((a,b)=>b.date.localeCompare(a.date));
+  const perPage=10;
+  const totalPages=Math.max(1,Math.ceil(all.length/perPage));
+  const pageData=all.slice((page-1)*perPage,page*perPage);
+  if(!all.length){
+    wrap.innerHTML=`<div class="card" style="margin-top:12px"><div style="text-align:center;padding:20px;color:var(--gray);font-size:13px">등록된 상담 이력이 없습니다</div></div>`;
+    return;
+  }
+  let feedHtml=`<div class="card" style="margin-top:12px">
+    <h3 style="margin-bottom:12px">📋 전체 상담 이력 <span style="font-size:12px;color:var(--gray);font-weight:400">${all.length}건</span></h3>`;
+  pageData.forEach(c=>{
+    feedHtml+=`<div class="cons-item" style="cursor:pointer" onclick="openConsForStu('${c.stuId}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-weight:700;font-size:13px;color:var(--navy)">${c.stuName} <span style="font-weight:400;font-size:11px;color:var(--gray)">${c.stuEname||""} · ${c.cls}반</span></span>
+        <span style="font-size:11px;color:var(--gray)">${c.date}</span>
+      </div>
+      <div style="font-size:12px;color:#444;line-height:1.5">${(c.content||"").slice(0,80)}${(c.content||"").length>80?"…":""}</div>
+      ${c.type?`<span style="font-size:10px;background:#eef2ff;color:#1A3169;border-radius:4px;padding:2px 6px;margin-top:4px;display:inline-block">${c.type}</span>`:""}
+    </div>`;
+  });
+  // 페이지네이션
+  if(totalPages>1){
+    feedHtml+=`<div style="display:flex;justify-content:center;gap:6px;margin-top:12px;flex-wrap:wrap">`;
+    for(let p=1;p<=totalPages;p++){
+      feedHtml+=`<button onclick="loadConsFeed(${p})" style="padding:5px 10px;border-radius:6px;border:1px solid ${p===page?"#1A3169":"#d0d6e0"};background:${p===page?"#1A3169":"#fff"};color:${p===page?"#C9A84C":"#555"};font-size:12px;cursor:pointer;font-weight:${p===page?"700":"400"}">${p}</button>`;
+    }
+    feedHtml+=`</div>`;
+  }
+  feedHtml+=`</div>`;
+  wrap.innerHTML=feedHtml;
 }
 function searchCons(){
   const raw=document.getElementById("cons-search")?.value||"";
@@ -3612,7 +3905,10 @@ function searchCons(){
     return;
   }
   if(hint)hint.style.display="none";
-  const matches=activeStudents().filter(s=>s.name.includes(raw.trim())||s.ename.toLowerCase().includes(q));
+  const matches=activeStudents().filter(s=>{
+    if(user.role!=="admin"&&s.cls!==user.cls) return false;
+    return s.name.includes(raw.trim())||s.ename.toLowerCase().includes(q);
+  });
   if(!matches.length){
     sug.style.display="block";
     sug.style.border="1px solid #e0e4ec";
@@ -3728,30 +4024,9 @@ async function confirmAddConsInline(id){
   const list=Array.isArray(prev)?prev:Object.values(prev);
   list.push({date,type,counselor,content,createdAt:new Date().toISOString()});
   await db.ref("consultations/"+id).set(list);
+  consCache[id]=(consCache[id]||0)+1;
   showToast("상담 등록 완료 ✓");
   loadConsDetail(id);
-}
-function openAddConsGlobal(){
-  if(!consSelId){
-    const stus=activeStudents().sort((a,b)=>a.name.localeCompare(b.name,"ko"));
-    const o=document.createElement("div");o.className="overlay";
-    o.innerHTML=`<div class="modal">
-      <h2>상담 등록 — 학생 선택</h2>
-      <div class="search-wrap" style="margin-bottom:10px">
-        <input type="text" id="picker-search" placeholder="이름 검색..." oninput="filterPickerList(this);toggleClear('picker-search','picker-clear')"
-          style="width:100%;border:1px solid #d0d6e0;border-radius:6px;padding:8px 10px;font-size:13px">
-        <button id="picker-clear" class="search-clear" onclick="document.getElementById('picker-search').value='';toggleClear('picker-search','picker-clear');filterPickerList(document.getElementById('picker-search'))">✕</button>
-      </div>
-      <div id="picker-list" style="max-height:300px;overflow-y:auto">
-        ${stus.map(s=>`<div class="stu-item" style="cursor:pointer" onclick="pickConsStudent('${s.id}','${s.name}')">
-          <div class="stu-avatar" style="background:${CLS_COLOR[s.cls]};width:30px;height:30px;font-size:12px">${s.name[0]}</div>
-          <div><div style="font-size:13px;font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--gray)">${s.cls}반</div></div>
-        </div>`).join("")}
-      </div>
-      <div class="modal-footer"><button class="btn btn-ghost" onclick="this.closest('.overlay').remove()">취소</button></div>
-    </div>`;
-    document.body.appendChild(o);
-  } else { openAddCons(consSelId); }
 }
 function filterPickerList(input){
   const q=input.value.toLowerCase();
@@ -3795,6 +4070,7 @@ async function confirmAddCons(id){
   const list=Array.isArray(prev)?prev:Object.values(prev);
   list.push({date,type,counselor,content,createdAt:new Date().toISOString()});
   await db.ref("consultations/"+id).set(list);
+  consCache[id]=(consCache[id]||0)+1;
   document.querySelector(".overlay").remove();
   showToast("상담 등록 완료 ✓");
   loadConsDetail(id);
@@ -3806,6 +4082,7 @@ async function deleteCons(id,idx){
   const list=Array.isArray(prev)?prev:Object.values(prev);
   list.splice(idx,1);
   await db.ref("consultations/"+id).set(list);
+  consCache[id]=Math.max(0,(consCache[id]||1)-1);
   showToast("삭제 완료");
   loadConsDetail(id);
 }
@@ -3853,7 +4130,7 @@ async function confirmEditCons(id,idx){
 // ── ADMIN: CLASS PROGRESS ──
 function renderProg(){
   let html=`<div class="card"><h3>📚 반별 진도 설정</h3>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:14px">교재명과 총 단원 수를 설정하면 선생님이 완료 단원을 입력해 진도율이 자동 계산됩니다.</div>`;
+    <div style="font-size:12px;color:var(--gray);margin-bottom:14px">교재명과 진도를 입력하세요. <b>완료/총단원</b>(예: 3/15) 형식으로 입력하면 진도율이 즉시 저장됩니다.</div>`;
   CLS.forEach(cls=>{
     const prog=(settings.classProgress||{})[cls]||{};
     const monthProg=(prog[curMonth])||{};
@@ -3861,20 +4138,23 @@ function renderProg(){
     const deadline=monthProg.deadline||"";
     html+=`<div style="margin-bottom:20px;padding:14px;background:#f8f9ff;border-radius:8px">
       <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">${CLS_EMOJI[cls]} ${cls}반</div>
-      <div style="display:grid;grid-template-columns:1fr 80px 32px;gap:6px;margin-bottom:6px">
+      <div style="display:grid;grid-template-columns:1fr 110px 32px;gap:6px;margin-bottom:6px">
         <div style="font-size:11px;color:var(--gray)">교재명</div>
-        <div style="font-size:11px;color:var(--gray)">총 단원수</div>
+        <div style="font-size:11px;color:var(--gray);text-align:center">완료/총단원 (예: 3/15)</div>
         <div></div>
       </div>
       <div id="prog-books-${cls}">
-        ${books.length ? books.map((b,i)=>`
-          <div class="prog-book-row" style="display:grid;grid-template-columns:1fr 80px 32px;gap:6px;margin-bottom:6px;align-items:center">
+        ${books.length ? books.map((b,i)=>{
+          const frac=b.completedUnits!==undefined?`${b.completedUnits||0}/${b.totalUnits||0}`:`0/${b.totalUnits||0}`;
+          return `<div class="prog-book-row" style="display:grid;grid-template-columns:1fr 110px 32px;gap:6px;margin-bottom:6px;align-items:center">
             <input type="text" class="prog-btitle" value="${b.title||""}" placeholder="교재명"
               style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px">
-            <input type="number" class="prog-bunits" value="${b.totalUnits||""}" placeholder="단원수" min="1"
-              style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center">
+            <input type="text" class="prog-bfrac" value="${frac}" placeholder="완료/총단원"
+              oninput="previewFrac(this)"
+              style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center;font-weight:700">
             <button class="btn btn-red btn-xs" onclick="removeProgBook(this)" style="padding:4px 6px">✕</button>
-          </div>`).join("")
+          </div>`;
+        }).join("")
         : `<div style="color:var(--gray);font-size:12px;margin-bottom:6px">교재가 없습니다.</div>`}
       </div>
       <button class="btn btn-ghost btn-xs" style="margin-bottom:10px" onclick="addProgBook('${cls}')">＋ 교재 추가</button>
@@ -3895,24 +4175,34 @@ function addProgBook(cls){
   if(placeholder)placeholder.remove();
   const row=document.createElement("div");
   row.className="prog-book-row";
-  row.style.cssText="display:grid;grid-template-columns:1fr 80px 32px;gap:6px;margin-bottom:6px;align-items:center";
+  row.style.cssText="display:grid;grid-template-columns:1fr 110px 32px;gap:6px;margin-bottom:6px;align-items:center";
   row.innerHTML=`<input type="text" class="prog-btitle" placeholder="교재명"
       style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px">
-    <input type="number" class="prog-bunits" placeholder="단원수" min="1"
-      style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center">
+    <input type="text" class="prog-bfrac" placeholder="완료/총단원" oninput="previewFrac(this)"
+      style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center;font-weight:700">
     <button class="btn btn-red btn-xs" onclick="removeProgBook(this)" style="padding:4px 6px">✕</button>`;
   container.appendChild(row);
 }
 function removeProgBook(btn){
   btn.closest(".prog-book-row").remove();
 }
+function previewFrac(inp){
+  const v=inp.value.trim();
+  const m=v.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if(m){inp.style.borderColor="#2e7d32";inp.style.color="#2e7d32";}
+  else{inp.style.borderColor="#d0d6e0";inp.style.color="var(--navy)";}
+}
 async function saveProg(cls){
   const rows=document.querySelectorAll(`#prog-books-${cls} .prog-book-row`);
   const books=[];
   rows.forEach(row=>{
     const title=row.querySelector(".prog-btitle")?.value?.trim()||"";
-    const totalUnits=parseInt(row.querySelector(".prog-bunits")?.value)||0;
-    if(title)books.push({title,totalUnits});
+    const fracVal=row.querySelector(".prog-bfrac")?.value?.trim()||"";
+    let completedUnits=0, totalUnits=0;
+    const m=fracVal.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if(m){completedUnits=parseInt(m[1]);totalUnits=parseInt(m[2]);}
+    else{ totalUnits=parseInt(fracVal)||0; }
+    if(title)books.push({title,totalUnits,completedUnits,pct:totalUnits>0?Math.round(completedUnits/totalUnits*100):0});
   });
   const deadline=document.getElementById("prog-dl-"+cls)?.value||"";
   const update={};
@@ -3920,8 +4210,14 @@ async function saveProg(cls){
   update["classProgress/"+cls+"/"+curMonth+"/deadline"]=deadline;
   update["classProgress/"+cls+"/"+curMonth+"/updatedAt"]=new Date().toISOString();
   await db.ref("settings").update(update);
+  if(!settings.classProgress) settings.classProgress={};
+  if(!settings.classProgress[cls]) settings.classProgress[cls]={};
+  if(!settings.classProgress[cls][curMonth]) settings.classProgress[cls][curMonth]={};
+  settings.classProgress[cls][curMonth].books=books;
+  settings.classProgress[cls][curMonth].deadline=deadline;
   await loadSettings();
   showToast(cls+"반 진도 저장 완료 ✓");
+  renderProg();
 }
 
 
@@ -4383,7 +4679,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
   if(isShared)return;
 
   document.getElementById("cls-sel").innerHTML=
-    `<option value="admin">관리자</option>`+
+    `<option value="admin">🔑 관리자</option>`+
     CLS.map(c=>`<option value="${c}">${CLS_EMOJI[c]} ${c}반</option>`).join("");
 
   document.getElementById("login-btn").onclick=doLogin;
@@ -4395,6 +4691,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
   document.getElementById("next-month").onclick=()=>changeMonth(1);
   document.getElementById("logout-btn").onclick=()=>{
     user=null; navStack=[];
+    sessionStorage.removeItem("petamus_session");
     document.getElementById("topbar").style.display="none";
     document.getElementById("layout").style.display="none";
     document.getElementById("breadcrumb").style.display="none";
@@ -4404,6 +4701,39 @@ document.addEventListener("DOMContentLoaded",async()=>{
     document.getElementById("pin-in").value="";
     document.getElementById("login-err").textContent="";
   };
+
+  // 새로고침 시 세션 자동 복원
+  const saved=sessionStorage.getItem("petamus_session");
+  if(saved){
+    try{
+      const {cls,pin,scr,month,viewCls,inpTab:savedInpTab}=JSON.parse(saved);
+      await loadSettings();
+      if(PINS[cls]===pin){
+        await loadStudents();
+        await loadConsCache();
+        startStudentListener();
+        if(window.innerWidth<=700) document.getElementById("mobile-nav").style.display="flex";
+        if(cls==="admin"){
+          user={role:"admin",cls:"admin",name:"관리자",viewCls:viewCls||CLS[0]};
+        } else {
+          user={role:"teacher",cls,name:TCHR[cls]||cls};
+        }
+        if(month) curMonth=month;
+        if(typeof savedInpTab==="number") inpTab=savedInpTab;
+        document.getElementById("cur-month").textContent=fmtMonth(curMonth);
+        buildSB();
+        document.getElementById("login-wrap").style.display="none";
+        // 저장된 화면으로 복원, 없으면 기본 화면
+        const restoreScr=scr||{name:cls==="admin"?"home":"th",params:{}};
+        go(restoreScr.name, restoreScr.params||{});
+        // 진도 탭에서 새로고침한 경우 Firebase 직접 fetch
+        if(restoreScr.name==="inp" && savedInpTab===2 && restoreScr.params?.id){
+          await renderBooksTabAsync(restoreScr.params.id);
+        }
+        return;
+      }
+    }catch(e){ sessionStorage.removeItem("petamus_session"); }
+  }
 
   // Show login screen
   document.getElementById("login-wrap").style.display="flex";
@@ -4426,8 +4756,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
       [b,r,p].forEach(function(el){if(el){var ch=Chart.getChart(el);if(ch)ch.resize();}});
     }
   }
-  window.addEventListener('beforeprint',function(){ setChartH(185,165,165); });
-  window.addEventListener('afterprint', function(){ setChartH(220,210,210); });
+  window.addEventListener('beforeprint',function(){ setChartH(215,195,195); });
+  window.addEventListener('afterprint', function(){ setChartH(265,245,245); });
 })();
 </script>
 </body>
