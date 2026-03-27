@@ -1294,20 +1294,12 @@ function renderInp(id){
 
 async function switchInpTab(i,id){
   inpTab=i;
-  // 탭 상태 sessionStorage에 저장
   try{
     const saved=sessionStorage.getItem("petamus_session");
-    if(saved){
-      const sess=JSON.parse(saved);
-      sess.inpTab=i;
-      sessionStorage.setItem("petamus_session",JSON.stringify(sess));
-    }
+    if(saved){ const sess=JSON.parse(saved); sess.inpTab=i; sessionStorage.setItem("petamus_session",JSON.stringify(sess)); }
   }catch(e){}
-  if(i===2){
-    await renderBooksTabAsync(id); // 진도 탭: Firebase 직접 fetch
-  } else {
-    renderInp(id);
-  }
+  renderInp(id); // 탭바 + 캐시 데이터 즉시 렌더
+  if(i===2) renderBooksTabAsync(id); // 이후 Firebase 최신값으로 body만 업데이트
 }
 function goHome(){
   inpTab=0;
@@ -1565,13 +1557,22 @@ async function renderBooksTabAsync(id){
   if(!settings.classProgress[cls]) settings.classProgress[cls]={};
   if(!settings.classProgress[cls][curMonth]) settings.classProgress[cls][curMonth]={};
   settings.classProgress[cls][curMonth].books=clsBooks;
-  // inp-body가 있고 현재 진도탭이면 해당 영역만 교체
-  const body=document.getElementById("inp-body");
-  if(body && inpTab===2){
+
+  // #books-list 만 업데이트 (AR READING은 건드리지 않음)
+  const booksList=document.getElementById("books-list");
+  if(booksList && inpTab===2){
     const md=getMD(id);
     const locked=isLocked(s.cls);
-    body.innerHTML=renderBooksTab(id,md,locked);
-  } else if(!body){
+    const savedBooks=md.books||[];
+    const books=clsBooks.map(cb=>{
+      const saved=savedBooks.find(sb=>sb.title===cb.title);
+      const completedUnits=saved?saved.completedUnits:(cb.completedUnits||0);
+      return {title:cb.title,totalUnits:cb.totalUnits||0,completedUnits};
+    });
+    const displayBooks=books.length?books:savedBooks.map(b=>({title:b.title,totalUnits:b.totalUnits||0,completedUnits:b.completedUnits||b.pct||0}));
+    const dis=locked&&user.role!=="admin";
+    booksList.innerHTML=displayBooks.map((b,i)=>renderBookItem(b,i,dis)).join("");
+  } else if(!document.getElementById("inp-body")){
     inpTab=2;
     renderInp(id);
   }
@@ -1605,16 +1606,16 @@ function renderBooksTab(id,md,locked){
   if(!displayBooks.length){
     html+=`<div style="color:var(--gray);font-size:13px;padding:12px 0">관리자가 교재를 설정하면 여기에 표시됩니다.</div>`;
   } else {
-    // Header
-    html+=`<div style="display:grid;grid-template-columns:1fr 70px 70px 60px;gap:6px;margin-bottom:6px;padding:0 10px">
-      <div style="font-size:11px;color:var(--gray)">교재</div>
-      <div style="font-size:11px;color:var(--gray);text-align:center">총단원</div>
-      <div style="font-size:11px;color:var(--gray);text-align:center">완료단원</div>
-      <div style="font-size:11px;color:var(--gray);text-align:center">진도율</div>
-    </div>`;
-    html+=`<div id="books-list">`;
+    html+=`<div style="border:1px solid #e8ecf2;border-radius:8px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1fr 70px 70px 60px;gap:6px;padding:7px 10px;background:#f0f4ff;border-bottom:1px solid #e8ecf2">
+        <div style="font-size:11px;color:var(--gray);font-weight:600">교재</div>
+        <div style="font-size:11px;color:var(--gray);font-weight:600;text-align:center">총단원</div>
+        <div style="font-size:11px;color:var(--gray);font-weight:600;text-align:center">완료단원</div>
+        <div style="font-size:11px;color:var(--gray);font-weight:600;text-align:center">진도율</div>
+      </div>
+      <div id="books-list">`;
     displayBooks.forEach((b,i)=>{ html+=renderBookItem(b,i,dis); });
-    html+=`</div>`;
+    html+=`</div></div>`;
   }
   html+=`${!dis?`<div style="margin-top:14px"><button class="btn btn-primary" onclick="saveBooks('${id}')">💾 저장</button></div>`:""}`;
   html+='</div>';
@@ -1639,13 +1640,14 @@ function renderBooksTab(id,md,locked){
 function renderBookItem(b,i,dis){
   const pct=b.totalUnits>0?Math.round((b.completedUnits||0)/b.totalUnits*100):0;
   const barColor=pct>=80?"var(--green)":pct>=50?"var(--gold)":"var(--navy)";
-  return `<div class="book-item" id="book-${i}" style="margin-bottom:10px">
+  const bg=i%2===0?"#fff":"#f8f9ff";
+  return `<div id="book-${i}" style="background:${bg};padding:8px 10px;border-bottom:1px solid #f0f2f8">
     <div style="display:grid;grid-template-columns:1fr 70px 70px 60px;gap:6px;align-items:center">
       <div style="font-size:13px;font-weight:600">${b.title||""}</div>
       <div style="text-align:center;font-size:13px;color:var(--gray)">${b.totalUnits||"-"}단원</div>
       <div style="text-align:center">
         ${dis
-          ? `<span style="font-size:13px;font-weight:700">${b.completedUnits||0}단원</span>`
+          ? `<span style="font-size:13px;font-weight:700">${b.completedUnits||0}</span>`
           : `<input type="number" id="book-done-${i}" value="${b.completedUnits||0}" min="0" max="${b.totalUnits||999}"
               onchange="updateBookPct(${i},${b.totalUnits||0})"
               style="width:60px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center;font-weight:700">`
@@ -1653,7 +1655,7 @@ function renderBookItem(b,i,dis){
       </div>
       <div id="book-pct-display-${i}" style="text-align:center;font-size:13px;font-weight:700;color:${barColor}">${pct}%</div>
     </div>
-    <div style="background:#e8ecf2;border-radius:4px;height:4px;margin-top:5px">
+    <div style="background:#e8ecf2;border-radius:4px;height:4px;margin-top:6px">
       <div id="book-bar-${i}" style="background:${barColor};height:4px;border-radius:4px;width:${pct}%;transition:width .3s"></div>
     </div>
   </div>`;
@@ -2348,6 +2350,7 @@ async function deleteClass(cls){
   delete TCHR[cls];
   delete PINS[cls];
 
+  await loadSettings();
   showConfirmToast(`"${cls}" 반이 삭제되었습니다`, "success");
   renderTchrMgmt();
 }
@@ -2388,6 +2391,7 @@ async function saveClsModal(editCls){
   CLS_LEVEL[name]=level;
   if(!CLS.includes(name)) CLS.push(name);
 
+  await loadSettings();
   document.getElementById("cls-modal").remove();
   showToast((editCls?"반 수정":"새 반 추가")+" 완료 ✓");
   renderTchrMgmt();
@@ -2436,6 +2440,7 @@ async function saveTchrModal(tchrId){
     if(pin) await db.ref("settings/pins/"+tchrData.cls).set(pin);
   }
   document.getElementById("tchr-modal").remove();
+  await loadSettings();
   showToast(isEdit?name+" 정보 수정 완료 ✓":name+" 교사 등록 완료 ✓");
   renderTchrMgmt();
 }
@@ -2487,6 +2492,7 @@ async function confirmAssign(tchrId){
     await db.ref("settings/pins/"+newCls).set(t.pin);
   }
   document.getElementById("assign-modal").remove();
+  await loadSettings();
   showConfirmToast(newCls?t.name+" → "+newCls+" 배정 완료":t.name+" 미배정으로 변경 완료", "success");
   renderTchrMgmt();
 }
@@ -2762,36 +2768,31 @@ function renderRptBooks(books,arBooks){
 function renderRptComment(id,md){
   const s=students[id];
   const cls=s?.cls||"";
-  const teacherName=TCHR[cls]||"담임 선생님";
+  const teacherName=TCHR[cls]||"Homeroom Teacher";
   const tcmt=md.teacherComment||"";
   const acmt=md.adminComment||"";
   const tcmtAt=md.teacherCommentAt?md.teacherCommentAt.slice(0,10):"";
   const acmtAt=md.adminCommentAt?md.adminCommentAt.slice(0,10):"";
   let html=`<div class="rpt-wrap"><div class="rpt2-section">
-    <div class="rpt2-section-title">💬 TEACHER'S OVERALL COMMENT</div>
-    <div class="bubble-wrap">`;
+    <div class="rpt2-section-title">💬 TEACHER'S OVERALL COMMENT</div>`;
   if(tcmt){
-    html+=`<div class="bubble-row">
-      <div class="bubble-avatar navy">🏫</div>
-      <div class="bubble-content">
-        <div class="bubble-name">Homeroom Teacher · ${teacherName}</div>
-        <div class="bubble-box navy">${tcmt.replace(/\n/g,"<br>")}</div>
-        ${tcmtAt?`<div class="bubble-date">${tcmtAt}</div>`:""}
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:#1A3169;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+        ${teacherName}${tcmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none">· ${tcmtAt}</span>`:""}
       </div>
+      <div style="font-size:13px;line-height:1.9;color:#333;padding-left:2px">${tcmt.replace(/\n/g,"<br>")}</div>
     </div>`;
   }
   if(acmt){
-    html+=`<div class="bubble-row right">
-      <div class="bubble-avatar gold">👑</div>
-      <div class="bubble-content">
-        <div class="bubble-name">Head Teacher</div>
-        <div class="bubble-box gold">${acmt.replace(/\n/g,"<br>")}</div>
-        ${acmtAt?`<div class="bubble-date">${acmtAt}</div>`:""}
+    if(tcmt) html+=`<div style="border-top:1px solid #f0f0f0;margin-bottom:16px"></div>`;
+    html+=`<div style="margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#C9A84C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+        Head Teacher${acmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none">· ${acmtAt}</span>`:""}
       </div>
+      <div style="font-size:13px;line-height:1.9;color:#333;padding-left:2px">${acmt.replace(/\n/g,"<br>")}</div>
     </div>`;
   }
-  if(!tcmt&&!acmt)html+=`<div style="color:#aaa;font-size:13px;padding:12px 0">작성된 코멘트가 없습니다</div>`;
-  html+=`</div>`;
+  if(!tcmt&&!acmt) html+=`<div style="color:#aaa;font-size:13px;padding:12px 0">작성된 코멘트가 없습니다</div>`;
   // 푸터
   // 서명란
   // 서명 이미지 키 결정 (반 이름 or tchrId)
@@ -4205,18 +4206,35 @@ async function saveProg(cls){
     if(title)books.push({title,totalUnits,completedUnits,pct:totalUnits>0?Math.round(completedUnits/totalUnits*100):0});
   });
   const deadline=document.getElementById("prog-dl-"+cls)?.value||"";
+
+  // 1. 반 설정 저장 (템플릿)
   const update={};
   update["classProgress/"+cls+"/"+curMonth+"/books"]=books;
   update["classProgress/"+cls+"/"+curMonth+"/deadline"]=deadline;
   update["classProgress/"+cls+"/"+curMonth+"/updatedAt"]=new Date().toISOString();
   await db.ref("settings").update(update);
+
+  // 2. 해당 반 모든 학생 monthlyData에 동일한 books 일괄 적용
+  const stuUpdates={};
+  classStu(cls).forEach(s=>{
+    stuUpdates[s.id+"/monthlyData/"+curMonth+"/books"]=books;
+  });
+  if(Object.keys(stuUpdates).length){
+    await db.ref("students").update(stuUpdates);
+    classStu(cls).forEach(s=>{
+      if(!s.monthlyData) s.monthlyData={};
+      if(!s.monthlyData[curMonth]) s.monthlyData[curMonth]={};
+      s.monthlyData[curMonth].books=books;
+    });
+  }
+
   if(!settings.classProgress) settings.classProgress={};
   if(!settings.classProgress[cls]) settings.classProgress[cls]={};
   if(!settings.classProgress[cls][curMonth]) settings.classProgress[cls][curMonth]={};
   settings.classProgress[cls][curMonth].books=books;
   settings.classProgress[cls][curMonth].deadline=deadline;
   await loadSettings();
-  showToast(cls+"반 진도 저장 완료 ✓");
+  showToast(cls+"반 전체("+classStu(cls).length+"명) 진도 적용 완료 ✓");
   renderProg();
 }
 
@@ -4525,17 +4543,26 @@ function openResetWizard(){
     <div class="form-group">
       <label>초기화 범위</label>
       <div style="background:#fff8f8;border:1px solid #f5c6c6;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px">
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer">
-          <input type="checkbox" id="rw-monthly" checked disabled style="accent-color:#c0392b">
-          <span style="font-size:13px">성적·출석·평가·진도·코멘트 <span style="color:#c0392b;font-size:11px">(필수)</span></span>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:default">
+          <input type="checkbox" id="rw-monthly" checked disabled style="accent-color:#c0392b;margin-top:2px">
+          <span style="font-size:13px;line-height:1.6">
+            월별 학생 데이터 <span style="color:#c0392b;font-size:11px">(필수)</span><br>
+            <span style="font-size:11px;color:var(--gray)">성적(과목별 점수) · SR 성적 · 영역별 평가 · 커리큘럼 진도 · 코멘트 · AR 독서</span>
+          </span>
         </label>
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer">
-          <input type="checkbox" id="rw-cons" style="accent-color:#c0392b">
-          <span style="font-size:13px">상담 이력 <span style="color:var(--gray);font-size:11px">(누적 전체 삭제)</span></span>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:pointer">
+          <input type="checkbox" id="rw-cons" style="accent-color:#c0392b;margin-top:2px">
+          <span style="font-size:13px;line-height:1.6">
+            상담 이력 삭제<br>
+            <span style="font-size:11px;color:var(--gray)">선택한 월과 무관하게 전체 상담 이력이 모두 삭제됩니다</span>
+          </span>
         </label>
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer">
-          <input type="checkbox" id="rw-prog" style="accent-color:#c0392b">
-          <span style="font-size:13px">반별진도 설정 <span style="color:var(--gray);font-size:11px">(해당 월)</span></span>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;cursor:pointer">
+          <input type="checkbox" id="rw-prog" style="accent-color:#c0392b;margin-top:2px">
+          <span style="font-size:13px;line-height:1.6">
+            반별 진도 설정 삭제<br>
+            <span style="font-size:11px;color:var(--gray)">해당 월의 교재·단원 설정 삭제 (다른 월은 유지됨)</span>
+          </span>
         </label>
       </div>
     </div>
@@ -4566,9 +4593,9 @@ function confirmResetStep2(btn){
 
   // 2단계: 최종 확인 모달
   const o2=document.createElement("div");o2.className="overlay";
-  const scopeList=["성적·출석·평가·진도·코멘트"];
-  if(inclCons)scopeList.push("상담 이력 (전체)");
-  if(inclProg)scopeList.push("반별진도 설정");
+  const scopeList=["성적·SR·평가·진도·코멘트·AR독서 (월별 학생 데이터)"];
+  if(inclCons)scopeList.push("상담 이력 전체");
+  if(inclProg)scopeList.push("반별 진도 설정 (해당 월)");
 
   o2.innerHTML=`<div class="modal" style="max-width:380px">
     <h2 style="color:#c0392b">⚠️ 최종 확인</h2>
