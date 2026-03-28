@@ -410,7 +410,6 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
       <option value="Griffin">🦁 Griffin</option>
       <option value="Unicorn">🦄 Unicorn</option>
       <option value="Kelpie">🌊 Kelpie</option>
-      <option value="Orion">⚔️ Orion</option>
       <option value="admin">🔑 관리자</option>
     </select>
     <input type="password" id="pin-in" placeholder="PIN 번호 입력" maxlength="6">
@@ -457,12 +456,12 @@ firebase.initializeApp(FB);
 const db=firebase.database();
 
 
-const DEFAULT_PINS={Phoenix:"1111",Pegasus:"2222",Griffin:"3333",Unicorn:"4444",Kelpie:"5555",Orion:"6666",admin:"0000"};
-const DEFAULT_TCHR={Phoenix:"Ms. Felicia",Pegasus:"Ms. Sydney",Griffin:"Ms. Nal",Unicorn:"Mr. Silo",Kelpie:"Ms. Betty",Orion:""};
-const DEFAULT_CLS=["Phoenix","Pegasus","Griffin","Unicorn","Kelpie","Orion"];
-const DEFAULT_CLS_COLOR={Phoenix:"#e8a0bf",Pegasus:"#a0c4e8",Griffin:"#a0e8b4",Unicorn:"#c4a0e8",Kelpie:"#e8c4a0",Orion:"#e8d4a0"};
-const DEFAULT_CLS_EMOJI={Phoenix:"🦅",Pegasus:"🐴",Griffin:"🦁",Unicorn:"🦄",Kelpie:"🌊",Orion:"⚔️"};
-const DEFAULT_CLS_LEVEL={Phoenix:"Lv.1",Pegasus:"Lv.2",Griffin:"Lv.3",Unicorn:"Lv.4",Kelpie:"Lv.5",Orion:"Lv.5"};
+const DEFAULT_PINS={Phoenix:"1111",Pegasus:"2222",Griffin:"3333",Unicorn:"4444",Kelpie:"5555",admin:"0000"};
+const DEFAULT_TCHR={Phoenix:"Ms. Felicia",Pegasus:"Ms. Sydney",Griffin:"Ms. Nal",Unicorn:"Mr. Silo",Kelpie:"Ms. Betty"};
+const DEFAULT_CLS=["Phoenix","Pegasus","Griffin","Unicorn","Kelpie"];
+const DEFAULT_CLS_COLOR={Phoenix:"#e8a0bf",Pegasus:"#a0c4e8",Griffin:"#a0e8b4",Unicorn:"#c4a0e8",Kelpie:"#e8c4a0"};
+const DEFAULT_CLS_EMOJI={Phoenix:"🦅",Pegasus:"🐴",Griffin:"🦁",Unicorn:"🦄",Kelpie:"🌊"};
+const DEFAULT_CLS_LEVEL={Phoenix:"Lv.1",Pegasus:"Lv.2",Griffin:"Lv.3",Unicorn:"Lv.4",Kelpie:"Lv.5"};
 // ── 반별 SVG 일러스트 (로그인 화면 + 사이드바 사용) ──
 const CLS_SVG={
   Phoenix:`<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="#C9A84C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M60 95 C55 75 35 65 25 48 C18 35 22 20 30 15 C35 12 42 14 45 20 C40 25 38 32 42 40 C46 30 52 22 60 18" stroke-width="2.5"/><path d="M60 95 C65 75 85 65 95 48 C102 35 98 20 90 15 C85 12 78 14 75 20 C80 25 82 32 78 40 C74 30 68 22 60 18" stroke-width="2.5"/><path d="M60 18 C58 8 54 4 50 6 C46 8 47 14 50 18" fill="#C9A84C" stroke-width="1.5"/><path d="M60 18 C62 8 66 4 70 6 C74 8 73 14 70 18" fill="#C9A84C" stroke-width="1.5"/><ellipse cx="60" cy="20" rx="6" ry="5" fill="#C9A84C"/><path d="M45 55 C40 60 30 65 25 75 C22 80 24 88 30 88" stroke-width="1.8"/><path d="M75 55 C80 60 90 65 95 75 C98 80 96 88 90 88" stroke-width="1.8"/><path d="M48 70 C44 78 40 85 42 95 C44 100 50 102 56 100" stroke-width="1.8"/><path d="M72 70 C76 78 80 85 78 95 C76 100 70 102 64 100" stroke-width="1.8"/><circle cx="60" cy="95" r="4" fill="#C9A84C"/><path d="M42 40 C38 48 35 56 38 62" stroke-width="1.5"/><path d="M78 40 C82 48 85 56 82 62" stroke-width="1.5"/></g></svg>`,
