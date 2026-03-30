@@ -483,13 +483,13 @@ const EVAL_DOMAINS=[
   {key:"speaking_confidence",label:"Confidence in Speaking",icon:"🗣",items:["말하기 자신감"]},
   {key:"teamwork",label:"Teamwork & Cooperation",icon:"🤝",items:["팀워크 / 협동"]},
   {key:"focus",label:"Focus & Concentration",icon:"🎯",items:["집중력"]},
-  {key:"english_usage",label:"English Usage Effort",icon:"🇬🇧",items:["영어 사용 노력"]}
+  {key:"english_usage",label:"English Usage Effort",icon:"💪",items:["영어 사용 노력"]}
 ];
 // 과목 목록 (Academic Performance)
 const SUBJECTS=[
   {key:"pyp",  label:"PYP",      full:"Primary Years Programme"},
   {key:"ela",  label:"ELA",      full:"English Language Arts"},
-  {key:"ss101",label:"SS101",    full:"Social Studies"}
+  {key:"ss101",label:"SS101",    full:"Sentence Stretch 101"}
 ];
 const CONS_TYPES=["전화","대면","문자","화상","기타"];
 
@@ -1447,9 +1447,9 @@ function renderScoreTab(id,md,cls,locked){
   const dis2=locked&&user.role!=="admin"?"disabled":"";
   html+=`<div class="card" style="margin-top:12px">
     <h3 style="margin-bottom:14px">📋 SR TEST RESULTS</h3>
-    <div style="font-size:12px;color:#888;margin-bottom:10px">SR Test Date:
-      <input type="text" id="sr-date" value="${sr.date||""}" ${dis2} placeholder="예: March 20"
-        style="border:none;border-bottom:1px solid #C9A84C;padding:2px 6px;font-size:12px;color:#C9A84C;font-weight:700;outline:none;width:120px">
+    <div style="font-size:12px;color:#C9A84C;font-weight:600;margin-bottom:10px">SR Test Date:
+      <input type="date" id="sr-date" value="${sr.date||""}" ${dis2}
+        style="border:none;border-bottom:1px solid #C9A84C;padding:2px 6px;font-size:12px;color:#C9A84C;font-weight:700;outline:none;width:140px;background:transparent">
     </div>
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -1512,7 +1512,6 @@ function renderEvalTab(id,md,locked){
         <span style="font-size:20px">${domain.icon}</span>
         <div>
           <div style="font-size:13px;font-weight:700;color:#1A3169">${domain.label}</div>
-          <div style="font-size:11px;color:#888">${domain.items[0]}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:4px">
@@ -1994,7 +1993,11 @@ async function saveEval(id){
 }
 
 async function saveSR(id){
-  const date=document.getElementById("sr-date")?.value.trim()||"";
+  const md=getMD(id);
+  const existingDate=(md.sr||{}).date||"";
+  const rawDate=document.getElementById("sr-date")?.value.trim()||"";
+  // YYYY-MM-DD 형식 그대로 저장 (달력 input과 호환)
+  const date=rawDate||existingDate;
   const ss=document.getElementById("sr-ss")?.value.trim()||"";
   const pr=document.getElementById("sr-pr")?.value.trim()||"";
   const ge=document.getElementById("sr-ge")?.value.trim()||"";
@@ -2004,13 +2007,23 @@ async function saveSR(id){
     `Scale Score: <b>${ss}</b>`,
     `Percentile Rank: <b>${pr}</b>`,
     ge?`Grade Equiv.: <b>${ge}</b>`:"",
-    irl?`IRL: <b>${irl}</b>`:""
+    irl?`IRL: <b>${irl}</b>`:"",
+    date?`Test Date: <b>${date}</b>`:""
   ].filter(Boolean);
   confirmSavePopup("📋 SR 저장",lines,async()=>{
     await saveStudentMD(id,{sr:{date,ss:ss?+ss:null,pr:pr?+pr:null,ge,irl}});
     showToast("SR 저장 완료 ✓");
     renderInp(id);
   });
+}
+
+function fmtSrDate(d){
+  if(!d) return "—";
+  if(typeof d==="string"&&d.match(/^\d{4}-\d{2}-\d{2}$/)){
+    const dt=new Date(d+"T00:00:00");
+    return dt.toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+  }
+  return d;
 }
 function gradeLabel(pct){
   if(!pct) return "—";
@@ -2607,18 +2620,16 @@ function renderRptMain(id,md){
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
           <colgroup>
-            <col style="width:28%">
-            <col style="width:10%">
+            <col style="width:32%">
             <col style="width:12%">
-            <col style="width:10%">
-            <col style="width:10%">
+            <col style="width:14%">
+            <col style="width:12%">
           </colgroup>
           <tr style="background:#1A3169;color:#C9A84C">
             <th style="padding:5px 8px;text-align:left">Subject</th>
             <th style="padding:5px 6px;text-align:center">Score</th>
             <th style="padding:5px 6px;text-align:center">Class Avg</th>
             <th style="padding:5px 6px;text-align:center">Grade</th>
-            <th style="padding:5px 6px;text-align:center">MoM</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2639,16 +2650,29 @@ function renderRptMain(id,md){
       <td style="padding:9px 8px;text-align:center;font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#888"}">
         ${grade}
       </td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px">${momArrow(subS.key)}</td>
     </tr>`;
   });
 
   if(overall!==null){
+    // 반 전체 Overall Average 계산 (전과목 평균의 평균)
+    const clsOverall=(()=>{
+      const stus=classStu(s.cls);
+      const stuAvgs=stus.map(st=>{
+        const subj=((st.monthlyData||{})[curMonth]||{}).subjects||{};
+        const pcts=SUBJECTS.map(sub=>{
+          const d=subj[sub.key]||{};
+          return d.score&&d.max?Math.round(d.score/d.max*100):null;
+        }).filter(v=>v!==null);
+        return pcts.length?pcts.reduce((a,b)=>a+b,0)/pcts.length:null;
+      }).filter(v=>v!==null);
+      return stuAvgs.length?Math.round(stuAvgs.reduce((a,b)=>a+b,0)/stuAvgs.length):null;
+    })();
+    const clsOverallColor=clsOverall!==null&&Math.round(overall)>=clsOverall?"#2e7d32":"#e65100";
     html+=`<tr style="background:#1A3169;border-top:2px solid #C9A84C">
       <td style="padding:9px 10px;color:#C9A84C;font-weight:800">OVERALL AVERAGE</td>
-      <td style="padding:9px 8px;text-align:center;color:#fff;font-weight:800;font-size:15px">${Math.round(overall)}%</td>
+      <td style="padding:9px 8px;text-align:center;color:#fff;font-weight:800;font-size:15px">${Math.round(overall)}</td>
+      <td style="padding:9px 8px;text-align:center;font-weight:700;font-size:13px;color:${clsOverall!==null?clsOverallColor:'#888'}">${clsOverall!==null?clsOverall:'—'}</td>
       <td style="padding:9px 8px;text-align:center;color:#C9A84C;font-weight:800">${gradeLabel(Math.round(overall))}</td>
-      <td colspan="3" style="padding:9px 8px;color:rgba(255,255,255,.7);font-size:11px"></td>
     </tr>`;
   }
 
@@ -2703,7 +2727,6 @@ function renderRptEval(ev){
     html+=`<div style="background:#f8f9ff;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:12px;font-weight:700;color:#1A3169">${d.icon} ${d.label}</div>
-        <div style="font-size:11px;color:#888">${d.items[0]}</div>
       </div>
       <div style="text-align:right">
         <div>${stars}</div>
@@ -2736,7 +2759,7 @@ function renderRptSR(id,md){
   let html='<div class="rpt-wrap"><div class="rpt2-section"><div class="rpt2-section-title">📋 SR TEST RESULTS</div>';
 
   if(sr.ss||sr.pr){
-    html+='<div style="font-size:11px;color:#888;margin-bottom:8px">SR Test Date: <b style="color:#C9A84C">'+(sr.date||"—")+'</b></div>'
+    html+='<div style="font-size:11px;color:#C9A84C;margin-bottom:8px;font-weight:600">SR Test Date: <b>'+(fmtSrDate(sr.date))+'</b></div>'
       +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
       +'<thead><tr style="background:#1A3169;color:#C9A84C">'
       +'<th style="padding:6px 8px;text-align:center">Scale Score (SS)</th>'
@@ -2807,7 +2830,7 @@ function renderRptComment(id,md){
   if(tcmt){
     html+=`<div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;color:#1A3169;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
-        ${teacherName}${tcmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none">· ${tcmtAt}</span>`:""}
+        ${teacherName}
       </div>
       <div style="font-size:13px;line-height:1.9;color:#333;padding-left:2px">${tcmt.replace(/\n/g,"<br>")}</div>
     </div>`;
@@ -2816,7 +2839,7 @@ function renderRptComment(id,md){
     if(tcmt) html+=`<div style="border-top:1px solid #f0f0f0;margin-bottom:16px"></div>`;
     html+=`<div style="margin-bottom:4px">
       <div style="font-size:11px;font-weight:700;color:#C9A84C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
-        Head Teacher${acmtAt?` <span style="font-weight:400;color:#bbb;font-size:10px;text-transform:none">· ${acmtAt}</span>`:""}
+        Head Teacher
       </div>
       <div style="font-size:13px;line-height:1.9;color:#333;padding-left:2px">${acmt.replace(/\n/g,"<br>")}</div>
     </div>`;
@@ -2940,7 +2963,7 @@ function drawMainCharts(id){
       ]
     },options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        title:{display:true,text:"Subject Scores vs. Class Average",font:{size:12,weight:"bold"},color:"#333",padding:{top:2,bottom:4}},
+        title:{display:true,text:"Student Score vs. Class Average",font:{size:12,weight:"bold"},color:"#333",padding:{top:2,bottom:4}},
         legend:{position:"top",align:"end",labels:{boxWidth:10,font:{size:9},padding:4}},
         datalabels:{display:false}
       },
@@ -3363,7 +3386,7 @@ function renderSharedReport(s,md,month){
   // SR 성적
   const srSection=sr.ss||sr.ge?`<div class="card">
     <h3>📋 SR TEST RESULTS</h3>
-    ${sr.date?`<div style="font-size:11px;color:#888;margin-bottom:10px">Test Date: <b style="color:#C9A84C">${sr.date}</b></div>`:""}
+    ${sr.date?`<div style="font-size:11px;color:#888;margin-bottom:10px">Test Date: <b style="color:#C9A84C">${fmtSrDate(sr.date)}</b></div>`:""}
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">
       <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">Scale Score</div><div style="font-size:18px;font-weight:800;color:#1A3169">${sr.ss||"—"}</div></div>
       <div style="background:#f8f9ff;border-radius:8px;padding:10px"><div style="font-size:10px;color:#888;margin-bottom:4px">Percentile</div><div style="font-size:18px;font-weight:800;color:#1A3169">${sr.pr||"—"}</div></div>
