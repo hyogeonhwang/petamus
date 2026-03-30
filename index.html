@@ -486,10 +486,37 @@ const EVAL_DOMAINS=[
   {key:"english_usage",label:"English Usage Effort",icon:"💪",items:["영어 사용 노력"]}
 ];
 // 과목 목록 (Academic Performance)
+// 반별 기본 과목 설정
+const DEFAULT_CLASS_SUBJECTS={
+  Phoenix:  [{key:"pyp",  label:"PYP",           full:"Primary Years Programme"},
+             {key:"ela",  label:"ELA",           full:"English Language Arts"},
+             {key:"ss101",label:"SS101",         full:"Sentence Stretch 101"}],
+  Pegasus:  [{key:"pyp",  label:"PYP",           full:"Primary Years Programme"},
+             {key:"ela",  label:"ELA",           full:"English Language Arts"},
+             {key:"ss101",label:"SS101",         full:"Sentence Stretch 101"}],
+  Griffin:  [{key:"pyp",  label:"PYP",           full:"Primary Years Programme"},
+             {key:"ela",  label:"ELA",           full:"English Language Arts"},
+             {key:"ss101",label:"SS101",         full:"Sentence Stretch 101"}],
+  Unicorn:  [{key:"pyp",  label:"PYP",           full:"Primary Years Programme"},
+             {key:"fluentree",label:"FluenTree", full:"FluenTree"},
+             {key:"wonderful_world",label:"Wonderful World",full:"Wonderful World"}],
+  Kelpie:   [{key:"ela",  label:"ELA",           full:"English Language Arts"},
+             {key:"grammar",label:"Grammar",     full:"Grammar"}]
+};
+let CLASS_SUBJECTS={...DEFAULT_CLASS_SUBJECTS};
+
+// 반별 과목 가져오기
+function getClsSubjects(cls){
+  return CLASS_SUBJECTS[cls]||DEFAULT_CLASS_SUBJECTS[cls]||[
+    {key:"pyp",label:"PYP",full:"Primary Years Programme"},
+    {key:"ela",label:"ELA",full:"English Language Arts"}
+  ];
+}
+// 하위 호환용 (전역 SUBJECTS → 현재 선택된 반 기준)
 const SUBJECTS=[
-  {key:"pyp",  label:"PYP",      full:"Primary Years Programme"},
-  {key:"ela",  label:"ELA",      full:"English Language Arts"},
-  {key:"ss101",label:"SS101",    full:"Sentence Stretch 101"}
+  {key:"pyp",  label:"PYP",   full:"Primary Years Programme"},
+  {key:"ela",  label:"ELA",   full:"English Language Arts"},
+  {key:"ss101",label:"SS101", full:"Sentence Stretch 101"}
 ];
 const CONS_TYPES=["전화","대면","문자","화상","기타"];
 
@@ -540,6 +567,12 @@ async function loadSettings(){
     if(d.level) CLS_LEVEL[c]=d.level;
   });
   _syncTeacherList(s);
+  // 반별 과목 설정 로드
+  if(s.classSubjects){
+    Object.entries(s.classSubjects).forEach(([cls,subs])=>{
+      if(Array.isArray(subs)&&subs.length) CLASS_SUBJECTS[cls]=subs;
+    });
+  }
   // 서명 이미지 로드
   if(s.signatures) SIGN_IMGS={...s.signatures};
 }
@@ -1033,6 +1066,7 @@ function buildSB(){
       {scr:"tchr",icon:"🏫",label:"교사/반 관리"},
       {scr:"cons",icon:"💬",label:"상담 관리"},
       {scr:"prog",icon:"📚",label:"반별 진도"},
+      {scr:"subj",icon:"📝",label:"반별 과목"},
       {scr:"arpt",icon:"📋",label:"보고서"},
       {scr:"cfg",icon:"⚙️",label:"설정"},
     ];
@@ -1407,7 +1441,8 @@ function renderScoreTab(id,md,cls,locked){
       </thead>
       <tbody>`;
 
-  SUBJECTS.forEach((sub,i)=>{
+  const clsSubjects=getClsSubjects(cls);
+  clsSubjects.forEach((sub,i)=>{
     const d=subj[sub.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     const grade=gradeLabel(pct);
@@ -1843,7 +1878,8 @@ function genAIDraft(id){
   const books=md.books||[];
 
   // 과목 성적 분석
-  const subjResults=SUBJECTS.map(sub=>{
+  const clsSubs=getClsSubjects(s.cls);
+  const subjResults=clsSubs.map(sub=>{
     const d=subj[sub.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     return {label:sub.label, score:d.score, max:d.max, pct, comment:d.comment||""};
@@ -2069,14 +2105,14 @@ function updateSubjAvg(subKey, id){
 
 function resetScoreInputs(id){
   const md=getMD(id);
+  const s2=students[id];
   const subj=md.subjects||{};
-  SUBJECTS.forEach(sub=>{
+  getClsSubjects(s2?.cls||"").forEach(sub=>{
     const d=subj[sub.key]||{};
     const scoreEl=document.getElementById("subj-"+sub.key+"-score");
     const maxEl=document.getElementById("subj-"+sub.key+"-max");
     if(scoreEl) scoreEl.value=d.score||"";
     if(maxEl) maxEl.value=d.max||100;
-    // 화면 업데이트
     updateSubjAvg(sub.key,id);
   });
   // SR도 되돌리기
@@ -2092,7 +2128,8 @@ function resetScoreInputs(id){
 async function saveScore(id){
   const subjects={};
   const lines=[];
-  SUBJECTS.forEach(s=>{
+  const sstuCls=students[id]?.cls||"";
+  getClsSubjects(sstuCls).forEach(s=>{
     const rawScore=document.getElementById("subj-"+s.key+"-score")?.value;
     const rawMax=document.getElementById("subj-"+s.key+"-max")?.value;
     const score=rawScore!==""&&rawScore!==null?parseFloat(rawScore):null;
@@ -2132,6 +2169,7 @@ function renderScr(name,params={}){
   if(name==="tchr"){ renderTchrMgmt(); return; }
   if(name==="cons"){ if(!consSelId)consSelId=null; renderCons(); return; }
   if(name==="prog"){ renderProg(); return; }
+  if(name==="subj"){ renderSubjMgmt(); return; }
   if(name==="arpt"){ renderARpt(); return; }
   if(name==="cfg"){ renderCfg(); return; }
 }
@@ -2586,7 +2624,7 @@ function renderRptMain(id,md){
   }
 
   // 전체 평균
-  const allScores=SUBJECTS.map(s=>{
+  const allScores=clsSubs.map(s=>{
     const d=subj[s.key]||{};
     return d.score&&d.max?d.score/d.max*100:null;
   }).filter(v=>v!==null);
@@ -2634,7 +2672,7 @@ function renderRptMain(id,md){
         </thead>
         <tbody>`;
 
-  SUBJECTS.forEach((subS,i)=>{
+  clsSubs.forEach((subS,i)=>{
     const d=subj[subS.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     const grade=gradeLabel(pct);
@@ -2659,7 +2697,7 @@ function renderRptMain(id,md){
       const stus=classStu(s.cls);
       const stuAvgs=stus.map(st=>{
         const subj=((st.monthlyData||{})[curMonth]||{}).subjects||{};
-        const pcts=SUBJECTS.map(sub=>{
+        const pcts=getClsSubjects(s.cls).map(sub=>{
           const d=subj[sub.key]||{};
           return d.score&&d.max?Math.round(d.score/d.max*100):null;
         }).filter(v=>v!==null);
@@ -2942,12 +2980,13 @@ function drawMainCharts(id){
   const mainProgress=document.getElementById("rpt-main-progress");
   if(mainBar&&window.Chart){
     // 과목별 개인 vs 반 평균 막대
-    const subjLabels=SUBJECTS.map(sub=>sub.label);
-    const subjPersonal=SUBJECTS.map(sub=>{
+    const clsS=getClsSubjects(s.cls);
+    const subjLabels=clsS.map(sub=>sub.label);
+    const subjPersonal=clsS.map(sub=>{
       const d=(md.subjects||{})[sub.key]||{};
       return d.score&&d.max?Math.round(d.score/d.max*100):0;
     });
-    const subjClassAvg=SUBJECTS.map(sub=>{
+    const subjClassAvg=clsS.map(sub=>{
       const stus=classStu(cls);
       const vals=stus.map(st=>{
         const d=((st.monthlyData||{})[curMonth]?.subjects||{})[sub.key]||{};
@@ -2974,12 +3013,12 @@ function drawMainCharts(id){
   }
   if(mainRadar&&window.Chart){
     // 과목별 레이더 개인 vs 반 평균
-    const radarLabels=SUBJECTS.map(s=>s.label);
-    const radarPersonal=SUBJECTS.map(sub=>{
+    const radarLabels=clsS.map(s=>s.label);
+    const radarPersonal=clsS.map(sub=>{
       const d=(md.subjects||{})[sub.key]||{};
       return d.score&&d.max?Math.round(d.score/d.max*100):0;
     });
-    const radarClassAvg=SUBJECTS.map(sub=>{
+    const radarClassAvg=clsS.map(sub=>{
       const stus=classStu(cls);
       const vals=stus.map(st=>{
         const d=((st.monthlyData||{})[curMonth]?.subjects||{})[sub.key]||{};
@@ -3003,12 +3042,12 @@ function drawMainCharts(id){
   }
   if(mainProgress&&window.Chart){
     // 과목별 수평 막대 - 개인 vs 반 평균 (가로형)
-    const hLabels=SUBJECTS.map(s=>s.label);
-    const hPersonal=SUBJECTS.map(sub=>{
+    const hLabels=clsS.map(s=>s.label);
+    const hPersonal=clsS.map(sub=>{
       const d=(md.subjects||{})[sub.key]||{};
       return d.score&&d.max?Math.round(d.score/d.max*100):0;
     });
-    const hClassAvg=SUBJECTS.map(sub=>{
+    const hClassAvg=clsS.map(sub=>{
       const stus=classStu(cls);
       const vals=stus.map(st=>{
         const d=((st.monthlyData||{})[curMonth]?.subjects||{})[sub.key]||{};
@@ -3369,7 +3408,7 @@ function renderSharedReport(s,md,month){
 
   // 과목별 성적
   const subj=md.subjects||{};
-  const subjRows=SUBJECTS.map(sub=>{
+  const subjRows=getClsSubjects(s.cls).map(sub=>{
     const d=subj[sub.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     if(!d.score&&!d.max) return "";
@@ -4298,6 +4337,67 @@ async function confirmEditCons(id,idx){
 }
 
 // ── ADMIN: CLASS PROGRESS ──
+// ── ADMIN: 반별 과목 설정 ──
+function renderSubjMgmt(){
+  let html=`<div class="card"><h3>📝 반별 과목 설정</h3>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:16px">반마다 성적 입력 과목을 설정하세요. 저장 후 해당 반 성적 입력·보고서에 즉시 반영됩니다.</div>`;
+  CLS.forEach(cls=>{
+    const subs=getClsSubjects(cls);
+    html+=`<div style="margin-bottom:24px;padding:16px;background:#f8f9ff;border-radius:10px;border:1px solid #e0e4ec">
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px">${CLS_EMOJI[cls]||""} ${cls}반</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;margin-bottom:6px">
+        <div style="font-size:11px;color:var(--gray)">과목명 (약어)</div>
+        <div style="font-size:11px;color:var(--gray)">전체명</div>
+        <div></div>
+      </div>
+      <div id="subj-list-${cls}">
+        ${subs.map((s,i)=>`<div class="subj-row" style="display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;margin-bottom:6px;align-items:center">
+          <input type="text" class="subj-label" value="${s.label}" placeholder="예: PYP, ELA"
+            style="border:1px solid #d0d6e0;border-radius:6px;padding:6px 8px;font-size:12px;font-weight:700">
+          <input type="text" class="subj-full" value="${s.full}" placeholder="예: Primary Years Programme"
+            style="border:1px solid #d0d6e0;border-radius:6px;padding:6px 8px;font-size:12px">
+          <button class="btn btn-red btn-xs" onclick="this.closest('.subj-row').remove()" style="padding:4px 6px">✕</button>
+        </div>`).join("")}
+      </div>
+      <button class="btn btn-ghost btn-xs" style="margin-top:4px" onclick="addSubjRow('${cls}')">＋ 과목 추가</button>
+      <div style="margin-top:10px">
+        <button class="btn btn-primary btn-xs" onclick="saveClsSubjects('${cls}')">💾 저장</button>
+      </div>
+    </div>`;
+  });
+  html+="</div>";
+  document.getElementById("main").innerHTML=html;
+}
+function addSubjRow(cls){
+  const container=document.getElementById("subj-list-"+cls);
+  const row=document.createElement("div");
+  row.className="subj-row";
+  row.style.cssText="display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;margin-bottom:6px;align-items:center";
+  row.innerHTML=`<input type="text" class="subj-label" placeholder="예: PYP"
+      style="border:1px solid #d0d6e0;border-radius:6px;padding:6px 8px;font-size:12px;font-weight:700">
+    <input type="text" class="subj-full" placeholder="예: Primary Years Programme"
+      style="border:1px solid #d0d6e0;border-radius:6px;padding:6px 8px;font-size:12px">
+    <button class="btn btn-red btn-xs" onclick="this.closest('.subj-row').remove()" style="padding:4px 6px">✕</button>`;
+  container.appendChild(row);
+}
+async function saveClsSubjects(cls){
+  const rows=document.querySelectorAll(`#subj-list-${cls} .subj-row`);
+  const subs=[];
+  rows.forEach(row=>{
+    const label=row.querySelector(".subj-label")?.value.trim()||"";
+    const full=row.querySelector(".subj-full")?.value.trim()||label;
+    if(label){
+      const key=label.toLowerCase().replace(/[^a-z0-9]/g,"_");
+      subs.push({key,label,full});
+    }
+  });
+  if(!subs.length){showToast("과목을 1개 이상 입력하세요");return;}
+  await db.ref("settings/classSubjects/"+cls).set(subs);
+  CLASS_SUBJECTS[cls]=subs;
+  showToast(`${cls}반 과목 저장 완료 ✓ (${subs.length}개)`);
+  renderSubjMgmt();
+}
+
 function renderProg(){
   let html=`<div class="card"><h3>📚 반별 진도 설정</h3>
     <div style="font-size:12px;color:var(--gray);margin-bottom:14px">교재명과 진도를 입력하세요. <b>완료/총단원</b>(예: 3/15) 형식으로 입력하면 진도율이 즉시 저장됩니다.</div>`;
