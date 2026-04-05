@@ -973,8 +973,8 @@ function go(name,params={},resetStack=false){
   // Build navStack
   if(name==="login"||resetStack){
     navStack=[];
-  } else if(name==="th"||name==="dash"||name==="home"){
-    navStack=[{name,params,label:name==="th"?(user.role==="admin"?(user.viewCls||CLS[0])+" 반":"홈"):(name==="home"?"홈":"대시보드")}];
+  } else if(name==="th"||name==="dash"||name==="home"||name==="arpt"){
+    navStack=[{name,params,label:name==="th"?(user.role==="admin"?(user.viewCls||CLS[0])+" 반":"홈"):(name==="home"?"홈":name==="arpt"?"보고서 목록":"대시보드")}];
   } else {
     // Don't duplicate last item
     const last=navStack[navStack.length-1];
@@ -2623,9 +2623,12 @@ function renderRptMain(id,md){
     return`<span style="color:#888">— 0</span>`;
   }
 
+  // 반별 과목
+  const clsSubs=getClsSubjects(s.cls);
+
   // 전체 평균
-  const allScores=clsSubs.map(s=>{
-    const d=subj[s.key]||{};
+  const allScores=clsSubs.map(sub=>{
+    const d=subj[sub.key]||{};
     return d.score&&d.max?d.score/d.max*100:null;
   }).filter(v=>v!==null);
   const overall=allScores.length?allScores.reduce((a,b)=>a+b,0)/allScores.length:null;
@@ -2978,9 +2981,9 @@ function drawMainCharts(id){
   const mainBar=document.getElementById("rpt-main-bar");
   const mainRadar=document.getElementById("rpt-main-radar");
   const mainProgress=document.getElementById("rpt-main-progress");
+  const clsS=getClsSubjects(s.cls);
   if(mainBar&&window.Chart){
     // 과목별 개인 vs 반 평균 막대
-    const clsS=getClsSubjects(s.cls);
     const subjLabels=clsS.map(sub=>sub.label);
     const subjPersonal=clsS.map(sub=>{
       const d=(md.subjects||{})[sub.key]||{};
@@ -4548,47 +4551,41 @@ async function bulkPrintCls(cls){
     .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
   if(!stus.length){ showToast("해당 반 학생이 없습니다"); return; }
 
-  showToast(`${cls}반 보고서 생성 중... (${stus.length}명)`);
+  showToast(`${cls}반 보고서 준비 중... (${stus.length}명)`);
 
-  // 새 창에 모든 학생 보고서를 연속으로 렌더
-  const win=window.open("","_blank");
-  win.document.write(`<!DOCTYPE html><html lang="ko"><head>
-    <meta charset="UTF-8">
-    <title>${cls}반 보고서 — ${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\/script>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif}
-      body{background:#fff;padding:0}
-      .page{padding:20px;page-break-after:always}
-      .page:last-child{page-break-after:avoid}
-      @media print{
-        .no-print{display:none!important}
-        body{padding:0}
-        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-      }
-      /* 보고서 스타일 복사 */
-      .rpt-wrap{max-width:700px;margin:0 auto 16px}
-      .rpt2-header{background:linear-gradient(135deg,#0f1f4e 0%,#1A3169 60%,#2a4a8a 100%);border-radius:16px;padding:24px;margin-bottom:12px;color:#fff}
-      .rpt2-section{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:12px;border:1px solid #e8ecf2}
-      .rpt2-section-title{font-size:13px;font-weight:800;color:#1A3169;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #C9A84C;text-transform:uppercase;letter-spacing:.5px}
-    </style>
-  </head><body>`);
+  // 기존 오버레이 제거
+  document.getElementById("bulk-print-overlay")?.remove();
 
+  let pagesHtml="";
   for(const s of stus){
     const md=getMD(s.id);
-    // renderRptMain 결과를 가져와서 삽입
-    const html=renderRptMain(s.id,md);
-    win.document.write(`<div class="page">${html}</div>`);
+    pagesHtml+=`<div class="bulk-page">${renderRptMain(s.id,md)}</div>`;
   }
 
-  win.document.write(`
-    <div class="no-print" style="position:fixed;bottom:20px;right:20px;display:flex;gap:8px;z-index:999">
-      <button onclick="window.print()" style="background:#1A3169;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🖨 인쇄</button>
-      <button onclick="window.close()" style="background:#f0f0f0;color:#333;border:none;padding:12px 24px;border-radius:8px;font-size:15px;cursor:pointer">✕ 닫기</button>
+  const overlay=document.createElement("div");
+  overlay.id="bulk-print-overlay";
+  overlay.style.cssText="position:fixed;inset:0;background:#fff;z-index:9999;overflow-y:auto;padding:20px";
+  overlay.innerHTML=`
+    <div class="no-print" style="position:fixed;top:16px;right:16px;display:flex;gap:8px;z-index:10000">
+      <button onclick="window.print()" style="background:#1A3169;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨 인쇄</button>
+      <button onclick="document.getElementById('bulk-print-overlay').remove()" style="background:#f0f0f0;color:#333;border:none;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer">✕ 닫기</button>
     </div>
-  </body></html>`);
-  win.document.close();
+    <style>
+      .bulk-page{page-break-after:always;padding-bottom:20px;margin-bottom:20px;border-bottom:2px dashed #ddd}
+      .bulk-page:last-child{page-break-after:avoid;border-bottom:none}
+      @media print{
+        #bulk-print-overlay .no-print{display:none!important}
+        .bulk-page{border-bottom:none!important;margin:0!important;padding:0!important}
+        *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+      }
+    </style>
+    ${pagesHtml}`;
+  document.body.appendChild(overlay);
+
+  // 차트 렌더링
+  setTimeout(()=>{
+    stus.forEach(s=>{ try{ drawMainCharts(s.id); }catch(e){} });
+  }, 300);
 }
 
 // ── ADMIN: SETTINGS ──
