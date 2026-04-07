@@ -1166,6 +1166,7 @@ async function doLogin(){
   await loadStudents();
   await loadConsCache();
   await migrateOriozToOrion();
+  petamusAutoSnapshot(); // 매일 첫 로그인 시 자동 스냅샷
   startStudentListener();
   document.getElementById("login-wrap").style.display="none";
   if(window.innerWidth<=700){
@@ -4681,6 +4682,85 @@ function exportExcel(){
 }
 
 // ── ADMIN: SETTINGS ──
+// ── 자동 스냅샷 ──
+const SNAP_PREFIX="petamus_snap_";
+const SNAP_MAX=7;
+
+function petamusAutoSnapshot(){
+  const today=new Date().toISOString().slice(0,10);
+  const key=SNAP_PREFIX+today;
+  if(localStorage.getItem(key)) return; // 오늘 이미 저장됨
+  try{
+    const data=JSON.stringify({students,settings,savedAt:new Date().toISOString()});
+    localStorage.setItem(key,data);
+    // 7일 초과 삭제
+    const keys=Object.keys(localStorage)
+      .filter(k=>k.startsWith(SNAP_PREFIX))
+      .sort().reverse();
+    keys.slice(SNAP_MAX).forEach(k=>localStorage.removeItem(k));
+    console.log("✅ 자동 스냅샷 저장 완료:",today);
+  }catch(e){
+    console.warn("스냅샷 저장 실패:",e);
+  }
+}
+
+function petamusSnapshotList(){
+  return Object.keys(localStorage)
+    .filter(k=>k.startsWith(SNAP_PREFIX))
+    .map(k=>k.replace(SNAP_PREFIX,""))
+    .sort().reverse();
+}
+
+async function petamusRestoreSnapshot(date){
+  // 관리자 PIN 재확인
+  const input=prompt(`⚠️ ${date} 스냅샷으로 복구합니다.\n\n관리자 PIN을 입력하세요:`);
+  if(input===null) return;
+  if(input!==PINS["admin"]){
+    showToast("❌ PIN이 올바르지 않습니다");
+    return;
+  }
+  const key=SNAP_PREFIX+date;
+  const raw=localStorage.getItem(key);
+  if(!raw){ showToast("스냅샷을 찾을 수 없습니다"); return; }
+  try{
+    const data=JSON.parse(raw);
+    showToast("⏳ 복구 중...");
+    await db.ref("students").set(data.students);
+    if(data.settings) await db.ref("settings").set(data.settings);
+    await loadStudents();
+    await loadSettings();
+    showToast(`✅ ${date} 스냅샷으로 복구 완료!`);
+    renderCfg();
+  }catch(e){
+    showToast("❌ 복구 실패: "+e.message);
+  }
+}
+
+function renderSnapList(){
+  const snaps=petamusSnapshotList();
+  const container=document.getElementById("petamus-snap-body");
+  if(!container) return;
+  if(!snaps.length){
+    container.innerHTML='<div style="font-size:12px;color:#9ca3af;padding:8px 0">저장된 스냅샷이 없습니다.<br>오늘 로그인 시 자동 저장됩니다.</div>';
+    return;
+  }
+  container.innerHTML=snaps.map(d=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0">
+      <span style="font-size:13px;font-weight:600;color:#374151">📅 ${d}</span>
+      <button class="btn btn-ghost btn-sm" onclick="petamusRestoreSnapshot('${d}')">↩ 복구</button>
+    </div>`).join("");
+}
+
+function toggleSnapList(){
+  const body=document.getElementById("petamus-snap-body");
+  const arrow=document.getElementById("petamus-snap-arrow");
+  if(!body) return;
+  const isHidden=body.style.display==="none";
+  body.style.display=isHidden?"block":"none";
+  arrow.textContent=isHidden?"▲":"▼";
+  if(isHidden) renderSnapList();
+}
+
 function renderCfg(){
   const pins=PINS;
   let html=`<div class="card">
@@ -4730,6 +4810,20 @@ function renderCfg(){
     <button class="btn btn-primary btn-sm" onclick="exportExcel()">
       📥 ${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월 Excel 다운로드
     </button>
+
+    <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
+    <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:6px">🛡️ 자동 스냅샷 복구</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:10px;line-height:1.7">
+      매일 첫 로그인 시 자동 저장됩니다. 최근 ${SNAP_MAX}일치 보관.<br>
+      복구 시 관리자 PIN 입력이 필요합니다.
+    </div>
+    <div style="border:1px solid #d1fae5;border-radius:8px;overflow:hidden">
+      <div onclick="toggleSnapList()" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#ecfdf5;cursor:pointer;user-select:none">
+        <span style="font-size:13px;font-weight:700;color:#166534">📋 스냅샷 목록 (${petamusSnapshotList().length}개)</span>
+        <span id="petamus-snap-arrow" style="color:#166534;font-size:12px">▼</span>
+      </div>
+      <div id="petamus-snap-body" style="display:none;padding:0 14px 4px"></div>
+    </div>
 
     <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">💾 데이터 백업 / 내보내기</div>
