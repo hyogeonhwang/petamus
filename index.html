@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
@@ -533,52 +534,6 @@ let settings={};
 let consCache={}; // stuId → 상담 건수 캐시
 let TEACHER_LIST={};  // id → {name, pin, cls} 교사 독립 저장소
 let SIGN_IMGS={};     // cls → base64 서명 이미지, admin → 원장 서명
-
-function petamusAutoSnapshot(){
-  try{
-    const now=new Date();
-    const key='petamus_snapshot_'+now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-    if(!localStorage.getItem(key)){
-      const snap=JSON.stringify({students,settings,savedAt:new Date().toISOString()});
-      localStorage.setItem(key,snap);
-      // 7일 이전 스냅샷 자동 삭제
-      for(let i=0;i<localStorage.length;i++){
-        const k=localStorage.key(i);
-        if(k&&k.startsWith('petamus_snapshot_')){
-          const d=new Date(k.replace('petamus_snapshot_',''));
-          if((now-d)>7*24*60*60*1000){localStorage.removeItem(k);i--;}
-        }
-      }
-    }
-  }catch(e){console.warn('페타무스 스냅샷 저장 실패:',e);}
-}
-
-function petamusRestoreSnapshot(date){
-  if(!confirm(date+' 스냅샷으로 복구하시겠습니까?\n현재 데이터가 해당 날짜 데이터로 교체됩니다.'))return;
-  try{
-    const raw=localStorage.getItem('petamus_snapshot_'+date);
-    if(!raw){alert('스냅샷 데이터가 없습니다');return;}
-    const snap=JSON.parse(raw);
-    if(snap.students){
-      // Firebase에 복구
-      db.ref('students').set(snap.students).then(()=>{
-        if(snap.settings) return db.ref('settings').set(snap.settings);
-      }).then(()=>{
-        alert('✅ '+date+' 스냅샷으로 복구 완료. 페이지를 새로고침합니다.');
-        location.reload();
-      }).catch(e=>alert('❌ 복구 실패: '+e.message));
-    }
-  }catch(e){alert('❌ 복구 실패: '+e.message);}
-}
-
-function petamusSnapshotList(){
-  const snaps=[];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith('petamus_snapshot_'))snaps.push(k.replace('petamus_snapshot_',''));
-  }
-  return snaps.sort().reverse();
-}
 
 async function loadStudents(){
   const snap=await db.ref("students").once("value");
@@ -1211,8 +1166,6 @@ async function doLogin(){
   await loadStudents();
   await loadConsCache();
   await migrateOriozToOrion();
-  // 자동 스냅샷 저장 (매일 첫 접속 시)
-  petamusAutoSnapshot();
   startStudentListener();
   document.getElementById("login-wrap").style.display="none";
   if(window.innerWidth<=700){
@@ -4636,6 +4589,97 @@ async function bulkPrintCls(cls){
   }, 300);
 }
 
+// ── EXCEL 내보내기 ──
+function exportExcel(){
+  if(!window.XLSX){ showToast("Excel 라이브러리 로딩 중... 잠시 후 다시 시도하세요"); return; }
+  const wb=XLSX.utils.book_new();
+  const yr=curMonth.slice(0,4);
+  const mo=+curMonth.slice(5);
+
+  CLS.forEach(cls=>{
+    const stus=activeStudents().filter(s=>s.cls===cls)
+      .sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+    if(!stus.length) return;
+
+    const clsSubs=getClsSubjects(cls);
+
+    // 반 평균 미리 계산
+    const clsAvgMap={};
+    clsSubs.forEach(sub=>{
+      const vals=stus.map(s=>{
+        const d=((s.monthlyData||{})[curMonth]?.subjects||{})[sub.key]||{};
+        return d.score&&d.max?Math.round(d.score/d.max*100):null;
+      }).filter(v=>v!==null);
+      clsAvgMap[sub.key]=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;
+    });
+
+    // 헤더 행
+    const subjHeaders=clsSubs.flatMap(sub=>[sub.label+" 점수", sub.label+" Class Avg", sub.label+" Grade"]);
+    const header=[
+      "이름","영어이름","학년",
+      ...subjHeaders,
+      "Overall Avg","Class Overall Avg","Overall Grade",
+      "SS","PR","GE","IRL","SR Test Date",
+      "담임 코멘트","Head Teacher 코멘트"
+    ];
+
+    // 데이터 행
+    const rows=stus.map(s=>{
+      const md=(s.monthlyData||{})[curMonth]||{};
+      const subj=md.subjects||{};
+      const sr=md.sr||{};
+
+      // 과목별 점수
+      const subjCells=clsSubs.flatMap(sub=>{
+        const d=subj[sub.key]||{};
+        const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
+        const grade=pct!==null?(pct>=93?"A":pct>=90?"A-":pct>=87?"B+":pct>=83?"B":pct>=80?"B-":pct>=77?"C+":pct>=73?"C":pct>=70?"C-":pct>=60?"D":"F"):"";
+        const avg=clsAvgMap[sub.key];
+        return [d.score||"", avg!==null?avg+"":"", grade];
+      });
+
+      // Overall
+      const pcts=clsSubs.map(sub=>{
+        const d=subj[sub.key]||{};
+        return d.score&&d.max?Math.round(d.score/d.max*100):null;
+      }).filter(v=>v!==null);
+      const overall=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):null;
+      const overallGrade=overall!==null?(overall>=93?"A":overall>=90?"A-":overall>=87?"B+":overall>=83?"B":overall>=80?"B-":overall>=77?"C+":overall>=73?"C":overall>=70?"C-":overall>=60?"D":"F"):"";
+
+      // 반 Overall 평균
+      const clsOverall=(()=>{
+        const avgs=Object.values(clsAvgMap).filter(v=>v!==null);
+        return avgs.length?Math.round(avgs.reduce((a,b)=>a+b,0)/avgs.length):null;
+      })();
+
+      return [
+        s.name, s.ename||"", s.grade||"",
+        ...subjCells,
+        overall!==null?overall:"", clsOverall!==null?clsOverall:"", overallGrade,
+        sr.ss||"", sr.pr||"", sr.ge||"", sr.irl||"", sr.date||"",
+        md.teacherComment||"", md.adminComment||""
+      ];
+    });
+
+    const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+
+    // 컬럼 너비 설정
+    ws["!cols"]=[
+      {wch:10},{wch:12},{wch:6},
+      ...clsSubs.flatMap(()=>[{wch:8},{wch:10},{wch:6}]),
+      {wch:10},{wch:14},{wch:10},
+      {wch:6},{wch:6},{wch:6},{wch:6},{wch:16},
+      {wch:50},{wch:50}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, cls+"반");
+  });
+
+  const filename=`Petamus_${yr}년${mo}월_보고서.xlsx`;
+  XLSX.writeFile(wb, filename);
+  showToast(`📥 ${filename} 다운로드 완료`);
+}
+
 // ── ADMIN: SETTINGS ──
 function renderCfg(){
   const pins=PINS;
@@ -4679,6 +4723,15 @@ function renderCfg(){
     </div>
 
     <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">📥 Excel 내보내기</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:10px;line-height:1.7">
+      현재 선택된 월의 전체 반 성적·SR·코멘트를 반별 시트로 내보냅니다.
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="exportExcel()">
+      📥 ${curMonth.slice(0,4)}년 ${+curMonth.slice(5)}월 Excel 다운로드
+    </button>
+
+    <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">💾 데이터 백업 / 내보내기</div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.7">
       전체 학생 데이터를 JSON 파일로 저장합니다.<br>
@@ -4690,22 +4743,6 @@ function renderCfg(){
         ⬆️ 데이터 불러오기
         <input type="file" accept=".json" onchange="importData(this)" style="display:none">
       </label>
-    </div>
-
-    <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
-    <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:6px">🛡️ 자동 스냅샷 복구</div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.7">
-      매일 첫 접속 시 자동 저장됩니다. 최근 7일치 보관.
-    </div>
-    <div id="petamus_snap_list">
-      ${(()=>{
-        const snaps=petamusSnapshotList();
-        if(!snaps.length) return '<div style="font-size:12px;color:#9ca3af">저장된 스냅샷이 없습니다<br><small>오늘 로그인 후 자동 저장됩니다</small></div>';
-        return snaps.map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0f0f0">
-          <span style="font-size:13px;font-weight:700;color:#374151">📅 ${d} 스냅샷</span>
-          <button class="btn btn-ghost btn-sm" onclick="petamusRestoreSnapshot('${d}')">↩ 복구</button>
-        </div>`).join('');
-      })()}
     </div>
 
     <div style="border-top:1px solid #e8ecf2;margin:20px 0"></div>
