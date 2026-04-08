@@ -1437,8 +1437,7 @@ function renderScoreTab(id,md,cls,locked){
           <th style="padding:8px 10px;text-align:left;border-radius:6px 0 0 0">Subject</th>
           <th style="padding:7px 6px;text-align:center">Score</th>
           <th style="padding:7px 6px;text-align:center">Class Avg</th>
-          <th style="padding:7px 6px;text-align:center">Max</th>
-          <th style="padding:7px 6px;text-align:center;border-radius:0 6px 0 0">Grade</th>
+          <th style="padding:7px 6px;text-align:center;border-radius:0 6px 0 0">Max</th>
         </tr>
       </thead>
       <tbody>`;
@@ -1465,9 +1464,6 @@ function renderScoreTab(id,md,cls,locked){
         <input type="number" id="subj-${sub.key}-max" value="${d.max||100}" ${dis} min="0"
           oninput="updateSubjAvg('${sub.key}','${id}')"
           style="width:56px;border:1px solid #d0d6e0;border-radius:6px;padding:5px;font-size:13px;text-align:center">
-      </td>
-      <td style="padding:6px;text-align:center;font-size:15px">
-        <span id="subj-grade-${sub.key}" style="font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b"}">${grade}</span>
       </td>
     </tr>`;
   });
@@ -2663,16 +2659,14 @@ function renderRptMain(id,md){
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
           <colgroup>
-            <col style="width:32%">
-            <col style="width:12%">
-            <col style="width:14%">
-            <col style="width:12%">
+            <col style="width:40%">
+            <col style="width:15%">
+            <col style="width:15%">
           </colgroup>
           <tr style="background:#1A3169;color:#C9A84C">
             <th style="padding:5px 8px;text-align:left">Subject</th>
             <th style="padding:5px 6px;text-align:center">Score</th>
             <th style="padding:5px 6px;text-align:center">Class Avg</th>
-            <th style="padding:5px 6px;text-align:center">Grade</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2690,14 +2684,10 @@ function renderRptMain(id,md){
       <td style="padding:9px 8px;text-align:center;font-weight:700;font-size:13px">
         ${(()=>{const vals=classStu(s.cls).map(st=>(((st.monthlyData||{})[curMonth]||{}).subjects||{})[subS.key]?.score).filter(v=>v>0);const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;if(avg===null)return'<span style="color:#ccc">—</span>';const color=d.score&&d.score>=avg?"#2e7d32":"#e65100";return`<span style="color:${color}">${avg}</span>`;})()}
       </td>
-      <td style="padding:9px 8px;text-align:center;font-weight:800;color:${pct>=80?"#2e7d32":pct>=60?"#e65100":"#888"}">
-        ${grade}
-      </td>
     </tr>`;
   });
 
   if(overall!==null){
-    // 반 전체 Overall Average 계산 (전과목 평균의 평균)
     const clsOverall=(()=>{
       const stus=classStu(s.cls);
       const stuAvgs=stus.map(st=>{
@@ -2715,7 +2705,6 @@ function renderRptMain(id,md){
       <td style="padding:9px 10px;color:#C9A84C;font-weight:800">OVERALL AVERAGE</td>
       <td style="padding:9px 8px;text-align:center;color:#fff;font-weight:800;font-size:15px">${Math.round(overall)}</td>
       <td style="padding:9px 8px;text-align:center;font-weight:700;font-size:13px;color:${clsOverall!==null?clsOverallColor:'#888'}">${clsOverall!==null?clsOverall:'—'}</td>
-      <td style="padding:9px 8px;text-align:center;color:#C9A84C;font-weight:800">${gradeLabel(Math.round(overall))}</td>
     </tr>`;
   }
 
@@ -3417,13 +3406,11 @@ function renderSharedReport(s,md,month){
     const d=subj[sub.key]||{};
     const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
     if(!d.score&&!d.max) return "";
-    const grade=pct>=93?"A":pct>=90?"A-":pct>=87?"B+":pct>=83?"B":pct>=80?"B-":pct>=77?"C+":pct>=73?"C":pct>=70?"C-":pct>=60?"D":"F";
     const color=pct>=80?"#2e7d32":pct>=60?"#e65100":"#c0392b";
     return `<tr>
       <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:600">${sub.label}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center">${d.score} / ${d.max}</td>
       <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:700;color:${color}">${pct}%</td>
-      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:800;color:${color}">${grade}</td>
     </tr>`;
   }).join("");
 
@@ -3515,7 +3502,6 @@ function renderSharedReport(s,md,month){
           <th style="padding:8px 10px;text-align:left;font-size:11px;color:#888;font-weight:600">과목</th>
           <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">점수</th>
           <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">%</th>
-          <th style="padding:8px 10px;text-align:center;font-size:11px;color:#888;font-weight:600">Grade</th>
         </tr></thead>
         <tbody>${subjRows}</tbody>
       </table>
@@ -4615,7 +4601,7 @@ function exportExcel(){
     });
 
     // 헤더 행
-    const subjHeaders=clsSubs.flatMap(sub=>[sub.label+" 점수", sub.label+" Class Avg", sub.label+" Grade"]);
+    const subjHeaders=clsSubs.flatMap(sub=>[sub.label+" 점수", sub.label+" Class Avg"]);
     const header=[
       "이름","영어이름","학년",
       ...subjHeaders,
@@ -4636,7 +4622,7 @@ function exportExcel(){
         const pct=d.score&&d.max?Math.round(d.score/d.max*100):null;
         const grade=pct!==null?(pct>=93?"A":pct>=90?"A-":pct>=87?"B+":pct>=83?"B":pct>=80?"B-":pct>=77?"C+":pct>=73?"C":pct>=70?"C-":pct>=60?"D":"F"):"";
         const avg=clsAvgMap[sub.key];
-        return [d.score||"", avg!==null?avg+"":"", grade];
+        return [d.score||"", avg!==null?avg+"":""];
       });
 
       // Overall
