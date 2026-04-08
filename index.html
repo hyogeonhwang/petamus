@@ -395,6 +395,7 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
 @media(max-width:700px){
   #layout{padding-bottom:56px}
 }
+.loan-dd-item:hover{background:#eef2ff!important;}
 </style>
 </head>
 <body>
@@ -4502,7 +4503,7 @@ async function renderBookLoan(){
       html+="<td style=\"padding:8px;text-align:center\">"+l.loanDate+"</td>";
       html+="<td style=\"padding:8px;text-align:center;color:"+(over?"#c0392b":"#333")+";font-weight:"+(over?"700":"400")+"\">"+l.dueDate+"</td>";
       html+="<td style=\"padding:8px;text-align:center\">"+badge+"</td>";
-      html+="<td style=\"padding:8px;text-align:center\"><button class=\"btn btn-ghost btn-xs\" onclick=\"openStudentLoanHistory('"+l.studentId+"')">상세</button></td>";
+      html+="<td style=\"padding:8px;text-align:center\">"+"<button class=\"btn btn-ghost btn-xs\" onclick=\"openStudentLoanHistory(this.dataset.id)\" data-id=\""+l.studentId+"\">상세</button>"+"</td>";
       html+="</tr>";
     });
   }
@@ -4587,12 +4588,13 @@ function filterLoanStu(){
     dropdown.innerHTML='<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
   } else {
     dropdown.innerHTML=filtered.map(s=>{
-      const base='padding:9px 12px;font-size:13px;background:#fff;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center';
-      const cursor=s.canBorrow?'pointer':'default';
       const color=s.canBorrow?'#1A3169':'#aaa';
-      const badge=s.activeCnt>0?'<span style="font-size:10px;background:'+(s.canBorrow?'#dbeafe':'#fee2e2')+';color:'+(s.canBorrow?'#1e40af':'#991b1b')+';border-radius:8px;padding:2px 6px">현재 '+s.activeCnt+'권</span>':"";
-      return '<div onclick="selectLoanStu(\''+s.id+'\',\''+s.name+'\',\''+s.cls+'\','+s.activeCnt+','+s.canBorrow+')"'
-        +' style="'+base+';cursor:'+cursor+';color:'+color+'">'
+      const cursor=s.canBorrow?'pointer':'default';
+      const badge=s.activeCnt>0
+        ?'<span style="font-size:10px;background:'+(s.canBorrow?'#dbeafe':'#fee2e2')+';color:'+(s.canBorrow?'#1e40af':'#991b1b')+';border-radius:8px;padding:2px 6px">현재 '+s.activeCnt+'권</span>'
+        :"";
+      return '<div class="loan-dd-item" onclick="selectLoanStu(\''+s.id+'\',\''+s.name+'\',\''+s.cls+'\','+s.activeCnt+','+s.canBorrow+')"'
+        +' style="padding:9px 12px;font-size:13px;cursor:'+cursor+';color:'+color+';background:#fff;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">'
         +'<span><b>'+s.name+'</b> · '+s.cls+'반</span>'+badge+'</div>';
     }).join("");
   }
@@ -4784,18 +4786,20 @@ function openReturnModal(preSelId=""){
 function filterReturnStu(){
   const q=document.getElementById("return-stu-search")?.value.trim().toLowerCase()||"";
   const dropdown=document.getElementById("return-stu-dropdown");
-  if(!dropdown||!q) { if(dropdown) dropdown.style.display="none"; return; }
+  if(!dropdown||!q){if(dropdown)dropdown.style.display="none";return;}
   const list=window._returnStuList||[];
   const filtered=list.filter(s=>s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q));
   if(!filtered.length){
     dropdown.innerHTML='<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
   } else {
-    dropdown.innerHTML=filtered.map(s=>'<div onclick="selectReturnStu(\''+s.id+'\',\''+s.name+'\',\''+s.cls+'\','+s.cnt+')"'
-      +' style="padding:9px 12px;font-size:13px;cursor:pointer;color:#1A3169;background:#fff;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center"'
-      +' onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'#fff\'">'
-      +'<span><b>'+s.name+'</b> · '+s.cls+'반</span>'
-      +'<span style="font-size:11px;background:#dbeafe;color:#1e40af;border-radius:8px;padding:2px 6px">'+s.cnt+'권 대여중</span>'
-      +'</div>').join("");
+    dropdown.innerHTML=filtered.map(s=>{
+      const id=s.id,name=s.name,cls=s.cls,cnt=s.cnt;
+      return '<div class="loan-dd-item" onclick="selectReturnStu(\''+id+'\',\''+name+'\',\''+cls+'\','+cnt+')"'
+        +' style="padding:9px 12px;font-size:13px;cursor:pointer;color:#1A3169;background:#fff;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">'
+        +'<span><b>'+name+'</b> · '+cls+'반</span>'
+        +'<span style="font-size:11px;background:#dbeafe;color:#1e40af;border-radius:8px;padding:2px 6px">'+cnt+'권 대여중</span>'
+        +'</div>';
+    }).join("");
   }
   dropdown.style.display="block";
 }
