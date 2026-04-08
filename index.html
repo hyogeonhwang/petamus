@@ -4345,7 +4345,35 @@ async function loadBookData(){
   if(settSnap.val()) bookSettings={...bookSettings,...settSnap.val()};
   bookCatalog=catSnap.val()||{};
   const raw=loanSnap.val()||{};
-  bookLoans=Object.entries(raw).map(([id,v])=>({id,...v}));
+  // 구 형식(books 배열) → 신 형식(책 단위) 자동 변환
+  const normalized=[];
+  Object.entries(raw).forEach(([id,v])=>{
+    if(v.books&&Array.isArray(v.books)){
+      // 구 형식: books 배열을 개별 레코드로 펼침
+      v.books.forEach((b,i)=>{
+        normalized.push({
+          id:id+"_"+i,
+          studentId:v.studentId||"",
+          studentName:v.studentName||"",
+          cls:v.cls||"",
+          barcode:b.barcode||"",
+          title:b.title||"제목 없음",
+          author:b.author||"",
+          thumbnail:b.thumbnail||"",
+          loanDate:v.loanDate||"",
+          dueDate:v.dueDate||"",
+          status:v.status||"active",
+          returnDate:v.returnDate||"",
+          quizDone:b.quizDone||false,
+          month:v.month||curMonth
+        });
+      });
+    } else {
+      // 신 형식: 그대로 사용
+      normalized.push({id,...v});
+    }
+  });
+  bookLoans=normalized;
 }
 
 async function fetchBookInfo(barcode){
@@ -4391,23 +4419,39 @@ async function renderBookLoan(){
   const fCls=window._bookFilterCls||"all";
   const fStatus=window._bookFilterStatus||"all";
 
-  const overdue=bookLoans.filter(l=>l.status==="active"&&isOverdue(l.dueDate));
-  const dueSoon=bookLoans.filter(l=>{
-    if(l.status!=="active"||isOverdue(l.dueDate)) return false;
-    const days=Math.ceil((new Date(l.dueDate)-new Date())/(1000*60*60*24));
-    return days<=2;
+  // 학생별 그룹핑
+  const stuMap={};
+  bookLoans.forEach(l=>{
+    if(!stuMap[l.studentId]) stuMap[l.studentId]={
+      studentId:l.studentId, studentName:l.studentName, cls:l.cls, books:[]
+    };
+    stuMap[l.studentId].books.push(l);
   });
 
-  let filtered=[...bookLoans];
-  if(fCls!=="all") filtered=filtered.filter(l=>l.cls===fCls);
-  if(fStatus==="active") filtered=filtered.filter(l=>l.status==="active"&&!isOverdue(l.dueDate));
-  if(fStatus==="overdue") filtered=filtered.filter(l=>l.status==="active"&&isOverdue(l.dueDate));
-  if(fStatus==="returned") filtered=filtered.filter(l=>l.status==="returned");
-  filtered.sort((a,b)=>{
-    if(a.status==="active"&&b.status!=="active") return -1;
-    if(a.status!=="active"&&b.status==="active") return 1;
-    return new Date(b.loanDate)-new Date(a.loanDate);
+  // 알림용: 책 단위로 기한 체크
+  const overdueBooks=bookLoans.filter(l=>l.status==="active"&&isOverdue(l.dueDate));
+  const dueSoonBooks=bookLoans.filter(l=>{
+    if(l.status!=="active"||isOverdue(l.dueDate)) return false;
+    return Math.ceil((new Date(l.dueDate)-new Date())/(1000*60*60*24))<=2;
   });
+
+  // 학생별 알림 그룹
+  const overdueBystu={}, dueSoonBystu={};
+  overdueBooks.forEach(l=>{
+    if(!overdueBystu[l.studentId]) overdueBystu[l.studentId]={studentName:l.studentName,cls:l.cls,books:[]};
+    overdueBystu[l.studentId].books.push(l);
+  });
+  dueSoonBooks.forEach(l=>{
+    if(!dueSoonBystu[l.studentId]) dueSoonBystu[l.studentId]={studentName:l.studentName,cls:l.cls,books:[]};
+    dueSoonBystu[l.studentId].books.push(l);
+  });
+
+  // 필터 적용 (학생 단위)
+  let filteredStus=Object.values(stuMap);
+  if(fCls!=="all") filteredStus=filteredStus.filter(g=>g.cls===fCls);
+  if(fStatus==="active") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"&&!isOverdue(b.dueDate)));
+  if(fStatus==="overdue") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"&&isOverdue(b.dueDate)));
+  if(fStatus==="returned") filteredStus=filteredStus.filter(g=>g.books.every(b=>b.status==="returned"));
 
   let html="<div class=\"card\">";
   html+="<h3>📖 도서 대여 관리</h3>";
@@ -4417,44 +4461,35 @@ async function renderBookLoan(){
   html+="<button class=\"btn btn-ghost btn-sm\" onclick=\"openBookSettings()\">⚙️ 설정</button>";
   html+="</div>";
 
-  if(overdue.length){
+  // 기한 초과 알림
+  if(Object.keys(overdueBystu).length){
     html+="<div style=\"background:#fff0f0;border:2px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px\">";
-    html+="<div style=\"font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px\">🔴 반납 기한 초과 ("+overdue.length+"권) — 즉시 확인 필요</div>";
-    // 학생별 그룹핑
-    const grouped={};
-    overdue.forEach(l=>{
-      if(!grouped[l.studentId]) grouped[l.studentId]={name:l.studentName,cls:l.cls,loans:[]};
-      grouped[l.studentId].loans.push(l);
-    });
-    Object.values(grouped).forEach(g=>{
-      const maxDays=Math.max(...g.loans.map(l=>Math.ceil((new Date()-new Date(l.dueDate))/(1000*60*60*24))));
+    html+="<div style=\"font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px\">🔴 반납 기한 초과 — 즉시 확인 필요</div>";
+    Object.values(overdueBystu).forEach(g=>{
+      const maxDays=Math.max(...g.books.map(b=>Math.ceil((new Date()-new Date(b.dueDate))/(1000*60*60*24))));
       html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fca5a5;font-size:13px\">";
-      html+="<span><b>"+g.name+"</b> ("+g.cls+"반) · "+g.loans.length+"권 · <span style=\"color:#c0392b;font-weight:700\">최대 "+maxDays+"일 초과</span></span>";
-      html+="<button class=\"btn btn-ghost btn-xs\" style=\"color:#c0392b\" onclick=\"openReturnModal('"+g.loans[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
+      html+="<span><b>"+g.studentName+"</b> ("+g.cls+"반) · <b>"+g.books.length+"권</b> 초과 · 최대 <span style=\"color:#c0392b;font-weight:700\">"+maxDays+"일</span></span>";
+      html+="<button class=\"btn btn-ghost btn-xs\" style=\"color:#c0392b\" onclick=\"openReturnModal('"+g.books[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
       html+="</div>";
     });
     html+="</div>";
   }
 
-  if(dueSoon.length){
+  // 임박 알림
+  if(Object.keys(dueSoonBystu).length){
     html+="<div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px\">";
-    html+="<div style=\"font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px\">🟡 반납 임박 ("+dueSoon.length+"권)</div>";
-    const grouped={};
-    dueSoon.forEach(l=>{
-      if(!grouped[l.studentId]) grouped[l.studentId]={name:l.studentName,cls:l.cls,loans:[]};
-      grouped[l.studentId].loans.push(l);
-    });
-    Object.values(grouped).forEach(g=>{
-      const minDays=Math.min(...g.loans.map(l=>Math.ceil((new Date(l.dueDate)-new Date())/(1000*60*60*24))));
+    html+="<div style=\"font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px\">🟡 반납 임박</div>";
+    Object.values(dueSoonBystu).forEach(g=>{
+      const minDays=Math.min(...g.books.map(b=>Math.ceil((new Date(b.dueDate)-new Date())/(1000*60*60*24))));
       html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fcd34d;font-size:13px\">";
-      html+="<span><b>"+g.name+"</b> ("+g.cls+"반) · "+g.loans.length+"권 · D-"+minDays+"</span>";
-      html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"openReturnModal('"+g.loans[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
+      html+="<span><b>"+g.studentName+"</b> ("+g.cls+"반) · <b>"+g.books.length+"권</b> · D-"+minDays+"</span>";
+      html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"openReturnModal('"+g.books[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
       html+="</div>";
     });
     html+="</div>";
   }
 
-  // 필터
+  // 필터 바
   html+="<div style=\"display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px;background:#f8f9ff;border-radius:8px\">";
   html+="<span style=\"font-size:12px;font-weight:700;color:var(--navy)\">필터:</span>";
   html+="<select onchange=\"window._bookFilterCls=this.value;renderBookLoan()\" style=\"border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px\">";
@@ -4467,43 +4502,59 @@ async function renderBookLoan(){
   html+="<option value=\"overdue\""+(fStatus==="overdue"?" selected":"")+">기한초과</option>";
   html+="<option value=\"returned\""+(fStatus==="returned"?" selected":"")+">반납완료</option>";
   html+="</select>";
-  html+="<span style=\"font-size:11px;color:#888\">"+filtered.length+"건</span>";
+  html+="<span style=\"font-size:11px;color:#888\">"+filteredStus.length+"명</span>";
   if(fCls!=="all"||fStatus!=="all") html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"window._bookFilterCls='all';window._bookFilterStatus='all';renderBookLoan()\">초기화</button>";
   html+="</div>";
 
-  // 테이블 (책 단위)
+  // 테이블 (학생 단위)
   html+="<div style=\"overflow-x:auto\"><table style=\"width:100%;border-collapse:collapse;font-size:12px\">";
   html+="<thead><tr style=\"background:#1A3169;color:#C9A84C\">";
-  html+="<th style=\"padding:8px;text-align:left\">학생</th><th style=\"padding:8px;text-align:left\">반</th>";
-  html+="<th style=\"padding:8px;text-align:left\">책 제목</th>";
-  html+="<th style=\"padding:8px;text-align:center\">대여일</th>";
-  html+="<th style=\"padding:8px;text-align:center\">반납기한</th>";
+  html+="<th style=\"padding:8px;text-align:left\">학생</th>";
+  html+="<th style=\"padding:8px;text-align:left\">반</th>";
+  html+="<th style=\"padding:8px;text-align:center\">대여중</th>";
+  html+="<th style=\"padding:8px;text-align:center\">최근 대여일</th>";
+  html+="<th style=\"padding:8px;text-align:center\">가장 빠른 반납기한</th>";
   html+="<th style=\"padding:8px;text-align:center\">상태</th>";
   html+="<th style=\"padding:8px;text-align:center\">상세</th>";
   html+="</tr></thead><tbody>";
 
-  if(!filtered.length){
+  if(!filteredStus.length){
     html+="<tr><td colspan=\"7\" style=\"padding:20px;text-align:center;color:#aaa\">해당하는 대여 이력이 없습니다</td></tr>";
   } else {
-    filtered.forEach((l,i)=>{
-      const stu=students[l.studentId];
-      const over=l.status==="active"&&isOverdue(l.dueDate);
-      const bg=over?"#fff5f5":(i%2===0?"#f8f9ff":"#fff");
-      const badge=l.status==="returned"
-        ?"<span style=\"background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px;font-size:11px\">반납완료</span>"
-        :over
-        ?"<span style=\"background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-size:11px\">🔴 기한초과</span>"
-        :"<span style=\"background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:11px\">대여중</span>";
+    filteredStus.sort((a,b)=>(a.studentName||"").localeCompare(b.studentName||"","ko")).forEach((g,i)=>{
+      const activeBooks=g.books.filter(b=>b.status==="active");
+      const returnedBooks=g.books.filter(b=>b.status==="returned");
+      const hasOverdue=activeBooks.some(b=>isOverdue(b.dueDate));
+      const bg=hasOverdue?"#fff5f5":(i%2===0?"#f8f9ff":"#fff");
+
+      // 가장 빠른 반납기한
+      const earliestDue=activeBooks.length
+        ?activeBooks.map(b=>b.dueDate).sort()[0]
+        :null;
+      const over=earliestDue&&isOverdue(earliestDue);
+
+      // 상태 배지
+      let badge;
+      if(!activeBooks.length){
+        badge="<span style=\"background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px;font-size:11px\">반납완료</span>";
+      } else if(hasOverdue){
+        badge="<span style=\"background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-size:11px\">🔴 기한초과</span>";
+      } else {
+        badge="<span style=\"background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:11px\">대여중</span>";
+      }
+
       html+="<tr style=\"background:"+bg+";border-bottom:1px solid #e8ecf2\">";
-      html+="<td style=\"padding:8px;font-weight:700\">"+(stu?.name||l.studentName)+"</td>";
-      html+="<td style=\"padding:8px\">"+l.cls+"반</td>";
-      html+="<td style=\"padding:8px\">";
-      if(l.thumbnail) html+="<img src=\""+l.thumbnail+"\" style=\"width:20px;height:28px;object-fit:cover;border-radius:2px;vertical-align:middle;margin-right:6px\">";
-      html+=(l.title||"—")+"</td>";
-      html+="<td style=\"padding:8px;text-align:center\">"+l.loanDate+"</td>";
-      html+="<td style=\"padding:8px;text-align:center;color:"+(over?"#c0392b":"#333")+";font-weight:"+(over?"700":"400")+"\">"+l.dueDate+"</td>";
+      html+="<td style=\"padding:8px;font-weight:700\">"+g.studentName+"</td>";
+      html+="<td style=\"padding:8px\">"+g.cls+"반</td>";
+      html+="<td style=\"padding:8px;text-align:center;font-weight:700\">"+(activeBooks.length?"<span style=\"color:#1e40af\">"+activeBooks.length+"권</span>":"<span style=\"color:#aaa\">0권</span>")+"</td>";
+      // 최근 대여일
+      const latestLoanDate=activeBooks.length
+        ?activeBooks.map(b=>b.loanDate).sort().reverse()[0]
+        :(g.books.map(b=>b.loanDate).sort().reverse()[0]||"—");
+      html+="<td style=\"padding:8px;text-align:center\">"+latestLoanDate+"</td>";
+      html+="<td style=\"padding:8px;text-align:center;color:"+(over?"#c0392b":"#333")+";font-weight:"+(over?"700":"400")+"\">"+(earliestDue||"—")+"</td>";
       html+="<td style=\"padding:8px;text-align:center\">"+badge+"</td>";
-      html+="<td style=\"padding:8px;text-align:center\">"+"<button class=\"btn btn-ghost btn-xs\" onclick=\"openStudentLoanHistory(this.dataset.id)\" data-id=\""+l.studentId+"\">상세</button>"+"</td>";
+      html+="<td style=\"padding:8px;text-align:center\"><button class=\"btn btn-ghost btn-xs\" onclick=\"openStudentLoanHistory(this.dataset.id)\" data-id=\""+g.studentId+"\">상세</button></td>";
       html+="</tr>";
     });
   }
@@ -4743,7 +4794,7 @@ function openReturnModal(preSelId=""){
     if(!activeBystu[l.studentId]) activeBystu[l.studentId]={name:l.studentName,cls:l.cls,loans:[]};
     activeBystu[l.studentId].loans.push(l);
   });
-  window._returnStuList=Object.entries(activeBystu).map(([id,g])=>({id,name:g.name,cls:g.cls,cnt:g.loans.length}));
+  window._returnStuList=Object.entries(activeBystu).map(([id,g])=>({id,name:g.studentName||g.name,cls:g.cls,cnt:g.loans.length}));
 
   const o=document.createElement("div");
   o.className="overlay";
@@ -4769,7 +4820,7 @@ function openReturnModal(preSelId=""){
 
   if(preSelId&&activeBystu[preSelId]){
     const g=activeBystu[preSelId];
-    selectReturnStu(preSelId,g.name,g.cls,g.loans.length);
+    selectReturnStu(preSelId,g.studentName||g.name,g.cls,g.loans.length);
   }
   document.getElementById("return-stu-search").focus();
   setTimeout(()=>{
