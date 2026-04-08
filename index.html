@@ -2721,8 +2721,8 @@ function renderRptMain(id,md){
     <div class="rpt2-section" style="break-inside:avoid;page-break-inside:avoid">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
       <div style="position:relative;height:265px;margin-bottom:10px"><canvas id="rpt-main-bar"></canvas></div>
-      <div style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
-        <div style="position:relative;height:245px"><canvas id="rpt-main-radar"></canvas></div>
+      <div id="rpt-charts-row" style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
+        <div id="rpt-radar-wrap" style="position:relative;height:245px"><canvas id="rpt-main-radar"></canvas></div>
         <div style="position:relative;height:245px"><canvas id="rpt-main-progress"></canvas></div>
       </div>
     </div>
@@ -2976,6 +2976,13 @@ function drawMainCharts(id){
   const mainRadar=document.getElementById("rpt-main-radar");
   const mainProgress=document.getElementById("rpt-main-progress");
   const clsS=getClsSubjects(s.cls);
+
+  // 과목 3개 미만이면 레이더 숨기고 가로차트 전체 너비
+  const showRadar=clsS.length>=3;
+  const radarWrap=document.getElementById("rpt-radar-wrap");
+  const chartsRow=document.getElementById("rpt-charts-row");
+  if(radarWrap) radarWrap.style.display=showRadar?"block":"none";
+  if(chartsRow) chartsRow.style.gridTemplateColumns=showRadar?"1fr 2.5fr":"1fr";
   if(mainBar&&window.Chart){
     // 과목별 개인 vs 반 평균 막대
     const subjLabels=clsS.map(sub=>sub.label);
