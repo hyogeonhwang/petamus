@@ -4424,7 +4424,7 @@ function isOverdue(dueDate){
 async function renderBookLoan(){
   await loadBookData();
   const fCls=window._bookFilterCls||"all";
-  const fStatus=window._bookFilterStatus||"all";
+  const fStatus=window._bookFilterStatus||"current";
 
   // 학생별 그룹핑
   const stuMap={};
@@ -4456,6 +4456,7 @@ async function renderBookLoan(){
   // 필터 적용 (학생 단위)
   let filteredStus=Object.values(stuMap);
   if(fCls!=="all") filteredStus=filteredStus.filter(g=>g.cls===fCls);
+  if(fStatus==="current") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"));
   if(fStatus==="active") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"&&!isOverdue(b.dueDate)));
   if(fStatus==="overdue") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"&&isOverdue(b.dueDate)));
   if(fStatus==="returned") filteredStus=filteredStus.filter(g=>g.books.every(b=>b.status==="returned"));
@@ -4504,10 +4505,9 @@ async function renderBookLoan(){
   CLS.forEach(c=>{ html+="<option value=\""+c+"\""+(fCls===c?" selected":"")+">"+c+"반</option>"; });
   html+="</select>";
   html+="<select onchange=\"window._bookFilterStatus=this.value;renderBookLoan()\" style=\"border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px\">";
-  html+="<option value=\"all\""+(fStatus==="all"?" selected":"")+">전체 상태</option>";
-  html+="<option value=\"active\""+(fStatus==="active"?" selected":"")+">대여중</option>";
-  html+="<option value=\"overdue\""+(fStatus==="overdue"?" selected":"")+">기한초과</option>";
+  html+="<option value=\"current\""+(fStatus==="current"?" selected":"")+">대여중</option>";
   html+="<option value=\"returned\""+(fStatus==="returned"?" selected":"")+">반납완료</option>";
+  html+="<option value=\"all\""+(fStatus==="all"?" selected":"")+">전체</option>";
   html+="</select>";
   html+="<span style=\"font-size:11px;color:#888\">"+filteredStus.length+"명</span>";
   if(fCls!=="all"||fStatus!=="all") html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"window._bookFilterCls='all';window._bookFilterStatus='all';renderBookLoan()\">초기화</button>";
