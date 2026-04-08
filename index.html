@@ -4376,7 +4376,9 @@ function isOverdue(dueDate){
 
 async function renderBookLoan(){
   await loadBookData();
-  const today=new Date().toISOString().slice(0,10);
+  const fCls=window._bookFilterCls||"all";
+  const fStatus=window._bookFilterStatus||"all";
+
   const overdue=bookLoans.filter(l=>l.status==="active"&&isOverdue(l.dueDate));
   const dueSoon=bookLoans.filter(l=>{
     if(l.status!=="active"||isOverdue(l.dueDate)) return false;
@@ -4384,103 +4386,137 @@ async function renderBookLoan(){
     return days<=2;
   });
 
-  let html=`<div class="card">
-    <h3>📖 도서 대여 관리</h3>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-      <button class="btn btn-primary btn-sm" onclick="openLoanModal()">📤 대여 처리</button>
-      <button class="btn btn-ghost btn-sm" onclick="openReturnModal()">📥 반납 처리</button>
-      <button class="btn btn-ghost btn-sm" onclick="openBookSettings()">⚙️ 설정</button>
-    </div>
+  let filtered=[...bookLoans];
+  if(fCls!=="all") filtered=filtered.filter(l=>l.cls===fCls);
+  if(fStatus==="active") filtered=filtered.filter(l=>l.status==="active"&&!isOverdue(l.dueDate));
+  if(fStatus==="overdue") filtered=filtered.filter(l=>l.status==="active"&&isOverdue(l.dueDate));
+  if(fStatus==="returned") filtered=filtered.filter(l=>l.status==="returned");
+  filtered.sort((a,b)=>{
+    if(a.status==="active"&&b.status!=="active") return -1;
+    if(a.status!=="active"&&b.status==="active") return 1;
+    return new Date(b.loanDate)-new Date(a.loanDate);
+  });
 
-    ${overdue.length?`<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">🔴 반납 기한 초과 (${overdue.length}건)</div>
-      ${overdue.map(l=>{
-        const stu=students[l.studentId];
-        const days=Math.ceil((new Date()-new Date(l.dueDate))/(1000*60*60*24));
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fca5a5;font-size:13px">
-          <span><b>${stu?.name||l.studentName}</b> (${l.cls}반) · ${l.books?.length||0}권 · <span style="color:#c0392b">${days}일 초과</span></span>
-          <button class="btn btn-ghost btn-xs" onclick="openReturnModal('${l.studentId}')">반납</button>
-        </div>`;
-      }).join("")}
-    </div>`:""}
+  let html="<div class=\"card\">";
+  html+="<h3>📖 도서 대여 관리</h3>";
+  html+="<div style=\"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px\">";
+  html+="<button id=\"btn-loan\" class=\"btn btn-primary btn-sm\" onclick=\"openLoanModal();setBookBtn('btn-loan')\">📤 대여 처리</button>";
+  html+="<button id=\"btn-return\" class=\"btn btn-ghost btn-sm\" onclick=\"openReturnModal();setBookBtn('btn-return')\">📥 반납 처리</button>";
+  html+="<button class=\"btn btn-ghost btn-sm\" onclick=\"openBookSettings()\">⚙️ 설정</button>";
+  html+="</div>";
 
-    ${dueSoon.length?`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px">🟡 반납 임박 (${dueSoon.length}건)</div>
-      ${dueSoon.map(l=>{
-        const stu=students[l.studentId];
-        const days=Math.ceil((new Date(l.dueDate)-new Date())/(1000*60*60*24));
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fcd34d;font-size:13px">
-          <span><b>${stu?.name||l.studentName}</b> (${l.cls}반) · ${l.books?.length||0}권 · D-${days}</span>
-          <button class="btn btn-ghost btn-xs" onclick="openReturnModal('${l.studentId}')">반납</button>
-        </div>`;
-      }).join("")}
-    </div>`:""}
+  // 기한 초과 배너
+  if(overdue.length){
+    html+="<div style=\"background:#fff0f0;border:2px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px\">";
+    html+="<div style=\"font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px\">🔴 반납 기한 초과 ("+overdue.length+"건) — 즉시 확인 필요</div>";
+    overdue.forEach(l=>{
+      const stu=students[l.studentId];
+      const days=Math.ceil((new Date()-new Date(l.dueDate))/(1000*60*60*24));
+      html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fca5a5;font-size:13px\">";
+      html+="<span><b>"+(stu?.name||l.studentName)+"</b> ("+l.cls+"반) · "+(l.books?.length||0)+"권 · <span style=\"color:#c0392b;font-weight:700\">"+days+"일 초과</span></span>";
+      html+="<button class=\"btn btn-ghost btn-xs\" style=\"color:#c0392b\" onclick=\"openReturnModal('"+l.studentId+"');setBookBtn('btn-return')\">반납</button>";
+      html+="</div>";
+    });
+    html+="</div>";
+  }
 
-    <!-- 전체 대여 현황 -->
-    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">📋 전체 대여 현황</div>
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:#1A3169;color:#C9A84C">
-        <th style="padding:8px">학생</th>
-        <th style="padding:8px">반</th>
-        <th style="padding:8px;text-align:center">대여권수</th>
-        <th style="padding:8px;text-align:center">대여일</th>
-        <th style="padding:8px;text-align:center">반납기한</th>
-        <th style="padding:8px;text-align:center">상태</th>
-        <th style="padding:8px;text-align:center">상세</th>
-      </tr></thead>
-      <tbody>
-        ${bookLoans.length===0?`<tr><td colspan="7" style="padding:20px;text-align:center;color:#aaa">대여 이력이 없습니다</td></tr>`:""}
-        ${[...bookLoans].sort((a,b)=>{
-          if(a.status==="active"&&b.status!=="active") return -1;
-          if(a.status!=="active"&&b.status==="active") return 1;
-          return new Date(b.loanDate)-new Date(a.loanDate);
-        }).map((l,i)=>{
-          const stu=students[l.studentId];
-          const over=l.status==="active"&&isOverdue(l.dueDate);
-          const bg=i%2===0?"#f8f9ff":"#fff";
-          const statusBadge=l.status==="returned"
-            ?`<span style="background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px;font-size:11px">반납완료</span>`
-            :over
-            ?`<span style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-size:11px">기한초과</span>`
-            :`<span style="background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:11px">대여중</span>`;
-          return `<tr style="background:${bg};border-bottom:1px solid #e8ecf2">
-            <td style="padding:8px;font-weight:700">${stu?.name||l.studentName}</td>
-            <td style="padding:8px">${l.cls}반</td>
-            <td style="padding:8px;text-align:center">${l.books?.length||0}권</td>
-            <td style="padding:8px;text-align:center">${l.loanDate}</td>
-            <td style="padding:8px;text-align:center;color:${over?"#c0392b":"#333"};font-weight:${over?"700":"400"}">${l.dueDate}</td>
-            <td style="padding:8px;text-align:center">${statusBadge}</td>
-            <td style="padding:8px;text-align:center">
-              <button class="btn btn-ghost btn-xs" onclick="openLoanDetail('${l.id}')">상세</button>
-            </td>
-          </tr>`;
-        }).join("")}
-      </tbody>
-    </table>
-    </div>
-  </div>`;
+  // 임박 배너
+  if(dueSoon.length){
+    html+="<div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px\">";
+    html+="<div style=\"font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px\">🟡 반납 임박 ("+dueSoon.length+"건)</div>";
+    dueSoon.forEach(l=>{
+      const stu=students[l.studentId];
+      const days=Math.ceil((new Date(l.dueDate)-new Date())/(1000*60*60*24));
+      html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fcd34d;font-size:13px\">";
+      html+="<span><b>"+(stu?.name||l.studentName)+"</b> ("+l.cls+"반) · "+(l.books?.length||0)+"권 · D-"+days+"</span>";
+      html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"openReturnModal('"+l.studentId+"');setBookBtn('btn-return')\">반납</button>";
+      html+="</div>";
+    });
+    html+="</div>";
+  }
+
+  // 필터 바
+  html+="<div style=\"display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px;background:#f8f9ff;border-radius:8px\">";
+  html+="<span style=\"font-size:12px;font-weight:700;color:var(--navy)\">필터:</span>";
+  html+="<select onchange=\"window._bookFilterCls=this.value;renderBookLoan()\" style=\"border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px\">";
+  html+="<option value=\"all\"" +(fCls==="all"?" selected":"")+">전체 반</option>";
+  CLS.forEach(c=>{ html+="<option value=\""+c+"\"" +(fCls===c?" selected":"")+">"+c+"반</option>"; });
+  html+="</select>";
+  html+="<select onchange=\"window._bookFilterStatus=this.value;renderBookLoan()\" style=\"border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px\">";
+  html+="<option value=\"all\"" +(fStatus==="all"?" selected":"")+">전체 상태</option>";
+  html+="<option value=\"active\"" +(fStatus==="active"?" selected":"")+">대여중</option>";
+  html+="<option value=\"overdue\"" +(fStatus==="overdue"?" selected":"")+">기한초과</option>";
+  html+="<option value=\"returned\"" +(fStatus==="returned"?" selected":"")+">반납완료</option>";
+  html+="</select>";
+  html+="<span style=\"font-size:11px;color:#888\">"+filtered.length+"건</span>";
+  if(fCls!=="all"||fStatus!=="all") html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"window._bookFilterCls='all';window._bookFilterStatus='all';renderBookLoan()\">초기화</button>";
+  html+="</div>";
+
+  // 테이블
+  html+="<div style=\"overflow-x:auto\"><table style=\"width:100%;border-collapse:collapse;font-size:12px\">";
+  html+="<thead><tr style=\"background:#1A3169;color:#C9A84C\">";
+  html+="<th style=\"padding:8px;text-align:left\">학생</th><th style=\"padding:8px;text-align:left\">반</th>";
+  html+="<th style=\"padding:8px;text-align:center\">권수</th><th style=\"padding:8px;text-align:center\">대여일</th>";
+  html+="<th style=\"padding:8px;text-align:center\">반납기한</th><th style=\"padding:8px;text-align:center\">상태</th>";
+  html+="<th style=\"padding:8px;text-align:center\">상세</th></tr></thead><tbody>";
+
+  if(filtered.length===0){
+    html+="<tr><td colspan=\"7\" style=\"padding:20px;text-align:center;color:#aaa\">해당하는 대여 이력이 없습니다</td></tr>";
+  } else {
+    filtered.forEach((l,i)=>{
+      const stu=students[l.studentId];
+      const over=l.status==="active"&&isOverdue(l.dueDate);
+      const bg=over?"#fff5f5":(i%2===0?"#f8f9ff":"#fff");
+      const badge=l.status==="returned"
+        ?"<span style=\"background:#d1fae5;color:#065f46;border-radius:10px;padding:2px 8px;font-size:11px\">반납완료</span>"
+        :over
+        ?"<span style=\"background:#fee2e2;color:#991b1b;border-radius:10px;padding:2px 8px;font-size:11px\">🔴 기한초과</span>"
+        :"<span style=\"background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:11px\">대여중</span>";
+      html+="<tr style=\"background:"+bg+";border-bottom:1px solid #e8ecf2\">";
+      html+="<td style=\"padding:8px;font-weight:700\">"+(stu?.name||l.studentName)+"</td>";
+      html+="<td style=\"padding:8px\">"+l.cls+"반</td>";
+      html+="<td style=\"padding:8px;text-align:center\">"+(l.books?.length||0)+"권</td>";
+      html+="<td style=\"padding:8px;text-align:center\">"+l.loanDate+"</td>";
+      html+="<td style=\"padding:8px;text-align:center;color:"+(over?"#c0392b":"#333")+";font-weight:"+(over?"700":"400")+"\">" +l.dueDate+"</td>";
+      html+="<td style=\"padding:8px;text-align:center\">"+badge+"</td>";
+      html+="<td style=\"padding:8px;text-align:center\"><button class=\"btn btn-ghost btn-xs\" onclick=\"openLoanDetail('"+l.id+"')\">상세</button></td>";
+      html+="</tr>";
+    });
+  }
+  html+="</tbody></table></div></div>";
   document.getElementById("main").innerHTML=html;
 }
 
+function setBookBtn(activeId){
+  ["btn-loan","btn-return"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(id===activeId){ el.classList.add("btn-primary"); el.classList.remove("btn-ghost"); }
+    else { el.classList.add("btn-ghost"); el.classList.remove("btn-primary"); }
+  });
+}
+
+
 // ── 대여 모달 ──
 function openLoanModal(preSelId=""){
-  const stuOptions=activeStudents().map(s=>{
+  const allStus=activeStudents().map(s=>{
     const hasActive=getActiveLoan(s.id);
-    return `<option value="${s.id}" ${hasActive?"disabled":""} ${s.id===preSelId?"selected":""}>${s.name} (${s.cls}반)${hasActive?" — 대여중":""}`;
-  }).join("");
+    return {id:s.id, name:s.name, cls:s.cls, hasActive};
+  });
 
   const o=document.createElement("div");
   o.className="overlay";
   o.id="loan-modal";
   o.innerHTML=`<div class="modal" style="max-width:520px">
     <h2>📤 도서 대여</h2>
-    <div style="margin-bottom:12px">
-      <label style="font-size:12px;font-weight:700;color:var(--navy)">학생 선택</label>
-      <select id="loan-stu" style="width:100%;border:1px solid #d0d6e0;border-radius:8px;padding:8px;font-size:13px;margin-top:4px">
-        <option value="">-- 학생 선택 --</option>
-        ${stuOptions}
-      </select>
+    <div style="margin-bottom:12px;position:relative">
+      <label style="font-size:12px;font-weight:700;color:var(--navy)">학생 검색</label>
+      <input type="text" id="loan-stu-search" placeholder="이름 입력..." autocomplete="off"
+        style="width:100%;border:1px solid #d0d6e0;border-radius:8px;padding:8px;font-size:13px;margin-top:4px;box-sizing:border-box"
+        oninput="filterLoanStu()" onfocus="filterLoanStu()">
+      <div id="loan-stu-dropdown" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1px solid #d0d6e0;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+      <input type="hidden" id="loan-stu">
+      <div id="loan-stu-selected" style="display:none;margin-top:6px;background:#eef2ff;border-radius:6px;padding:7px 10px;font-size:13px;font-weight:600;color:#1A3169;display:flex;align-items:center;justify-content:space-between"></div>
     </div>
     <div style="margin-bottom:12px">
       <label style="font-size:12px;font-weight:700;color:var(--navy)">바코드 스캔 (최대 ${bookSettings.maxBooks}권)</label>
@@ -4498,9 +4534,73 @@ function openLoanModal(preSelId=""){
     </div>
   </div>`;
   document.body.appendChild(o);
-  document.getElementById("loan-barcode").focus();
+
+  // 학생 데이터 저장
+  window._loanStuList=allStus;
   window._loanBooks=[];
   renderLoanBookList();
+
+  // 미리 선택된 학생 처리
+  if(preSelId){
+    const s=allStus.find(s=>s.id===preSelId);
+    if(s) selectLoanStu(s.id, s.name, s.cls, s.hasActive);
+  }
+
+  document.getElementById("loan-stu-search").focus();
+
+  // 외부 클릭 시 드롭다운 닫기
+  setTimeout(()=>{
+    document.addEventListener("click", function closeDropdown(e){
+      if(!e.target.closest("#loan-modal")) return;
+      if(!e.target.closest("#loan-stu-search")&&!e.target.closest("#loan-stu-dropdown")){
+        document.getElementById("loan-stu-dropdown").style.display="none";
+      }
+    });
+  },100);
+}
+
+function filterLoanStu(){
+  const q=document.getElementById("loan-stu-search")?.value.trim().toLowerCase()||"";
+  const dropdown=document.getElementById("loan-stu-dropdown");
+  if(!dropdown) return;
+  const list=window._loanStuList||[];
+  const filtered=q?list.filter(s=>s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q)):list;
+  if(!filtered.length){
+    dropdown.innerHTML='<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
+  } else {
+    dropdown.innerHTML=filtered.map(s=>{
+      const base='padding:9px 12px;font-size:13px;background:#fff;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center';
+      const cursor=s.hasActive?'not-allowed':'pointer';
+      const color=s.hasActive?'#aaa':'#1A3169';
+      const badge=s.hasActive?'<span style="font-size:10px;background:#fee2e2;color:#991b1b;border-radius:8px;padding:2px 6px">대여중</span>':"";
+      return '<div onclick="selectLoanStu(\''+s.id+'\',\''+s.name+'\',\''+s.cls+'\','+(s.hasActive?'true':'false')+')"'
+        +' style="'+base+';cursor:'+cursor+';color:'+color+'"'
+        +' onmouseover="if('+!s.hasActive+')this.style.background=\'#eef2ff\'"'
+        +' onmouseout="this.style.background=\'#fff\'">'
+        +'<span><b>'+s.name+'</b> · '+s.cls+'반</span>'+badge+'</div>';
+    }).join("");
+  }
+  dropdown.style.display="block";
+}
+
+function selectLoanStu(id, name, cls, hasActive){
+  if(hasActive){ showToast(`${name} 학생은 현재 대여 중입니다`); return; }
+  document.getElementById("loan-stu").value=id;
+  document.getElementById("loan-stu-search").value=name;
+  document.getElementById("loan-stu-dropdown").style.display="none";
+  const sel=document.getElementById("loan-stu-selected");
+  if(sel){
+    sel.style.display="flex";
+    sel.innerHTML=`<span>✅ ${name} (${cls}반)</span><span onclick="clearLoanStu()" style="cursor:pointer;color:#888;font-size:12px">✕</span>`;
+  }
+}
+
+function clearLoanStu(){
+  document.getElementById("loan-stu").value="";
+  document.getElementById("loan-stu-search").value="";
+  const sel=document.getElementById("loan-stu-selected");
+  if(sel) sel.style.display="none";
+  document.getElementById("loan-stu-search").focus();
 }
 
 async function scanBook(){
