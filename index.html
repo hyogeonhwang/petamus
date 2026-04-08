@@ -1663,7 +1663,7 @@ function renderBooksTab(id,md,locked){
   const arVal=md.arBooks||"";
   html+=`<div class="card" style="margin-top:12px">
     <h3 style="margin-bottom:10px">📖 AR READING</h3>
-    <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div style="font-size:13px;color:var(--gray)">이달 읽은 AR 도서 권수</div>
       ${dis
         ? `<span style="font-weight:700;font-size:16px;color:var(--navy)">${arVal||0}권</span>`
@@ -1671,6 +1671,7 @@ function renderBooksTab(id,md,locked){
             style="width:70px;border:1px solid #d0d6e0;border-radius:6px;padding:7px;font-size:15px;text-align:center;font-weight:700">
            <button class="btn btn-primary btn-sm" onclick="saveARBooks('${id}')">저장</button>`
       }
+      <button class="btn btn-ghost btn-sm" onclick="openStudentLoanHistory('${id}')">📚 대여 목록</button>
     </div>
   </div>`;
   return html;
@@ -4506,6 +4507,63 @@ async function renderBookLoan(){
   document.getElementById("main").innerHTML=html;
 }
 
+async function openStudentLoanHistory(stuId){
+  if(!bookLoans.length) await loadBookData();
+  const stu=students[stuId];
+  if(!stu) return;
+  const loans=bookLoans.filter(l=>l.studentId===stuId)
+    .sort((a,b)=>new Date(b.loanDate)-new Date(a.loanDate));
+
+  const o=document.createElement("div");
+  o.className="overlay";
+
+  let body="";
+  if(!loans.length){
+    body='<div style="font-size:13px;color:#aaa;text-align:center;padding:20px">대여 이력이 없습니다</div>';
+  } else {
+    loans.forEach(l=>{
+      const over=l.status==="active"&&isOverdue(l.dueDate);
+      const statusBadge=l.status==="returned"
+        ?'<span style="background:#d1fae5;color:#065f46;border-radius:8px;padding:2px 7px;font-size:11px">반납완료</span>'
+        :over
+        ?'<span style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:2px 7px;font-size:11px">🔴 기한초과</span>'
+        :'<span style="background:#dbeafe;color:#1e40af;border-radius:8px;padding:2px 7px;font-size:11px">대여중</span>';
+
+      body+='<div style="border:1px solid #e8ecf2;border-radius:8px;padding:12px;margin-bottom:10px">';
+      body+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+      body+='<span style="font-size:12px;color:#888">대여일: <b>'+l.loanDate+'</b> · 반납기한: <b style="color:'+(over?"#c0392b":"#333")+'">'+l.dueDate+'</b></span>';
+      body+=statusBadge;
+      body+='</div>';
+
+      (l.books||[]).forEach(b=>{
+        body+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5">';
+        if(b.thumbnail){
+          body+='<img src="'+b.thumbnail+'" style="width:28px;height:38px;object-fit:cover;border-radius:3px">';
+        } else {
+          body+='<div style="width:28px;height:38px;background:#e0e4ec;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px">📚</div>';
+        }
+        body+='<div style="flex:1"><div style="font-size:12px;font-weight:700">'+b.title+'</div>';
+        if(b.author) body+='<div style="font-size:10px;color:#888">'+b.author+'</div>';
+        body+='</div>';
+        if(b.quizDone!==undefined){
+          body+='<span style="font-size:10px;background:'+(b.quizDone?"#d1fae5":"#fee2e2")+';color:'+(b.quizDone?"#065f46":"#991b1b")+';border-radius:8px;padding:2px 6px">'+(b.quizDone?"퀴즈완료":"미완료")+'</span>';
+        }
+        body+='</div>';
+      });
+      if(l.returnDate) body+='<div style="font-size:11px;color:#888;margin-top:6px;text-align:right">반납일: '+l.returnDate+'</div>';
+      body+='</div>';
+    });
+  }
+
+  o.innerHTML=`<div class="modal" style="max-width:500px;max-height:80vh;overflow-y:auto">
+    <h2>📚 ${stu.name} 도서 대여 이력</h2>
+    <div style="font-size:12px;color:#888;margin-bottom:12px">${stu.cls}반 · 총 ${loans.length}건</div>
+    ${body}
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="this.closest('.overlay').remove()">닫기</button></div>
+  </div>`;
+  document.body.appendChild(o);
+}
+
 function setBookBtn(activeId){
   ["btn-loan","btn-return"].forEach(id=>{
     const el=document.getElementById(id);
@@ -4641,11 +4699,49 @@ async function scanBook(){
   input.disabled=false;
   input.focus();
   if(book){
+    // 이전 대여 이력 체크
+    const stuId=document.getElementById("loan-stu").value;
+    if(stuId){
+      const prevLoan=bookLoans.find(l=>
+        l.studentId===stuId &&
+        l.status==="returned" &&
+        (l.books||[]).find(b=>b.barcode===barcode)
+      );
+      if(prevLoan){
+        const prevDate=prevLoan.loanDate;
+        const confirmed=await new Promise(resolve=>{
+          const o=document.createElement("div");
+          o.className="overlay";
+          o.style.zIndex="10001";
+          o.innerHTML=`<div class="modal" style="max-width:360px">
+            <h2>📖 이전 대여 이력 있음</h2>
+            <div style="font-size:13px;color:#555;line-height:1.8;margin-bottom:16px">
+              <b>${book.title}</b><br>
+              이 학생이 <b>${prevDate}</b>에 이미 대여한 적 있는 책입니다.<br><br>
+              그래도 추가하시겠습니까?
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-primary" onclick="this.closest('.overlay').remove();window._confirmResult=true;">✅ 추가</button>
+              <button class="btn btn-ghost" onclick="this.closest('.overlay').remove();window._confirmResult=false;">취소</button>
+            </div>
+          </div>`;
+          document.body.appendChild(o);
+          const check=setInterval(()=>{
+            if(window._confirmResult!==undefined){
+              clearInterval(check);
+              const result=window._confirmResult;
+              delete window._confirmResult;
+              resolve(result);
+            }
+          },100);
+        });
+        if(!confirmed) return;
+      }
+    }
     window._loanBooks.push({barcode,...book});
     renderLoanBookList();
     showToast(`✅ ${book.title} 추가됨`);
   } else {
-    // 책 정보 없으면 직접 입력
     const title=prompt("책 정보를 찾을 수 없습니다.\n책 제목을 직접 입력해주세요:");
     if(title){
       const newBook={title,author:"",thumbnail:""};
