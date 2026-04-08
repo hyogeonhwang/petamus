@@ -4348,8 +4348,10 @@ async function loadBookData(){
 
 async function fetchBookInfo(barcode){
   if(bookCatalog[barcode]) return bookCatalog[barcode];
+  const isbn=barcode.replace(/[^0-9X]/gi,"");
+  // 1차: Google Books API
   try{
-    const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${barcode}&maxResults=1`);
+    const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1`);
     const data=await res.json();
     if(data.items&&data.items[0]){
       const info=data.items[0].volumeInfo;
@@ -4362,7 +4364,24 @@ async function fetchBookInfo(barcode){
       bookCatalog[barcode]=book;
       return book;
     }
-  }catch(e){console.warn("Google Books API 오류:",e);}
+  }catch(e){console.warn("Google Books 오류:",e);}
+  // 2차: Open Library API
+  try{
+    const res2=await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+    const data2=await res2.json();
+    const key=Object.keys(data2)[0];
+    if(key&&data2[key]){
+      const info=data2[key];
+      const book={
+        title:info.title||"제목 없음",
+        author:(info.authors||[]).map(a=>a.name).join(", ")||"",
+        thumbnail:info.cover?.small||""
+      };
+      await db.ref("bookCatalog/"+barcode).set(book);
+      bookCatalog[barcode]=book;
+      return book;
+    }
+  }catch(e){console.warn("Open Library 오류:",e);}
   return null;
 }
 
