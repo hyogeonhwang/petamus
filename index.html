@@ -4351,7 +4351,7 @@ async function fetchBookInfo(barcode){
   const isbn=barcode.replace(/[^0-9X]/gi,"");
   // 1차: Google Books API
   try{
-    const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1`);
+    const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1&key=AIzaSyDbC1OgFzJNGArWj64n-tjp7X5_lbs9QTc`);
     const data=await res.json();
     if(data.items&&data.items[0]){
       const info=data.items[0].volumeInfo;
