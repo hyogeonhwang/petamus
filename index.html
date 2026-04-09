@@ -4602,6 +4602,12 @@ function openLoanModal(preSelId=""){
       <div id="loan-stu-status" style="display:none;margin-top:4px;font-size:12px;color:#888"></div>
     </div>
     <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:700;color:var(--navy)">대여일</label>
+      <input type="date" id="loan-date" style="width:100%;border:1px solid #d0d6e0;border-radius:8px;padding:8px;font-size:13px;margin-top:4px;box-sizing:border-box"
+        onchange="updateDueDate()">
+      <div style="font-size:11px;color:#888;margin-top:3px">반납기한: <b id="loan-due-preview"></b></div>
+    </div>
+    <div style="margin-bottom:12px">
       <label style="font-size:12px;font-weight:700;color:var(--navy)">바코드 스캔</label>
       <div style="display:flex;gap:8px;margin-top:4px">
         <input type="text" id="loan-barcode" placeholder="바코드 스캔 또는 직접 입력 후 Enter"
@@ -4620,6 +4626,10 @@ function openLoanModal(preSelId=""){
   window._loanStuList=allStus;
   window._loanBooks=[];
   renderLoanBookList();
+  // 대여일 기본값: 오늘
+  const todayStr=new Date().toISOString().slice(0,10);
+  const loanDateEl=document.getElementById("loan-date");
+  if(loanDateEl){ loanDateEl.value=todayStr; updateDueDate(); }
   if(preSelId){
     const s=allStus.find(s=>s.id===preSelId);
     if(s) selectLoanStu(s.id,s.name,s.cls,s.activeCnt,s.canBorrow);
@@ -4687,6 +4697,14 @@ function clearLoanStu(){
   if(st) st.style.display="none";
   window._loanMaxAdd=bookSettings.maxBooks;
   document.getElementById("loan-stu-search").focus();
+}
+
+function updateDueDate(){
+  const loanDate=document.getElementById("loan-date")?.value;
+  if(!loanDate) return;
+  const due=new Date(new Date(loanDate).getTime()+bookSettings.loanDays*24*60*60*1000).toISOString().slice(0,10);
+  const preview=document.getElementById("loan-due-preview");
+  if(preview) preview.textContent=due;
 }
 
 async function scanBook(){
@@ -4778,8 +4796,8 @@ async function submitLoan(){
   if(!stuId){showToast("학생을 선택하세요");return;}
   if(!window._loanBooks||!window._loanBooks.length){showToast("대여할 책을 스캔하세요");return;}
   const stu=students[stuId];
-  const today=new Date().toISOString().slice(0,10);
-  const due=new Date(Date.now()+bookSettings.loanDays*24*60*60*1000).toISOString().slice(0,10);
+  const today=document.getElementById("loan-date")?.value||new Date().toISOString().slice(0,10);
+  const due=new Date(new Date(today).getTime()+bookSettings.loanDays*24*60*60*1000).toISOString().slice(0,10);
 
   // 책 한 권씩 개별 저장
   const saves=window._loanBooks.map(b=>db.ref("bookLoans").push({
