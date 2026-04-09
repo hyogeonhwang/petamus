@@ -187,17 +187,28 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
   .rpt2-header{padding:12px 18px!important;margin-bottom:8px!important;border-radius:8px!important}
 
   /* 섹션 공통 */
-  .rpt2-section{box-shadow:none!important;border:1px solid #e8ecf2!important;padding:10px 14px!important;margin-bottom:6px!important}
-  .rpt2-section-title{font-size:11px!important;margin-bottom:6px!important;padding-bottom:4px!important;letter-spacing:0!important}
+  .rpt2-section{box-shadow:none!important;border:1px solid #e8ecf2!important;padding:7px 10px!important;margin-bottom:4px!important}
+  .rpt2-section-title{font-size:10px!important;margin-bottom:4px!important;padding-bottom:3px!important;letter-spacing:0!important}
 
   /* 성적 테이블 */
-  table{font-size:11px!important}
-  td,th{padding:5px 6px!important}
+  table{font-size:10px!important}
+  td,th{padding:3px 5px!important}
 
-  /* 2페이지 강제 분리 */
-  [style*="break-before:page"],[style*="page-break-before:always"]{
-    page-break-before:always!important;
-    break-before:page!important;
+  /* 헤더 축소 */
+  .rpt-header-inner{padding:10px 14px!important}
+
+  /* 인쇄용 차트 높이 */
+  #rpt-main-bar{height:258px!important}
+  #rpt-main-radar{height:238px!important}
+  #rpt-main-progress{height:238px!important}
+  .rpt-bar-wrap{height:258px!important}
+
+
+
+  /* 차트 후 페이지 분리 */
+  [style*="page-break-after:always"],[style*="break-after:page"]{
+    page-break-after:always!important;
+    break-after:page!important;
   }
 }
 
@@ -1778,6 +1789,10 @@ function renderCommentTab(id,md,locked){
       // 저장된 상태 → 읽기모드 + 수정/삭제 버튼
       return `<div id="tcmt-view">
         <div style="font-size:14px;line-height:1.8;white-space:pre-wrap;padding:10px;background:#fff;border-radius:6px;border:1px solid #e0e4ec;margin-bottom:8px">${tcmt.replace(/</g,"&lt;")}</div>
+        ${md.teacherCommentKo?`<div style="padding:8px 12px;background:#f8f9ff;border-left:3px solid #1A3169;border-radius:0 6px 6px 0;margin-bottom:8px">
+          <div style="font-size:10px;color:#888;margin-bottom:3px">한국어 번역</div>
+          <div style="font-size:13px;line-height:1.8;color:#333;white-space:pre-wrap">${md.teacherCommentKo.replace(/</g,"&lt;")}</div>
+        </div>`:""}
         <div style="display:flex;gap:6px" class="no-print">
           <button class="btn btn-ghost btn-sm" onclick="switchCommentEdit('teacher','${id}')">✏️ 수정</button>
           <button class="btn btn-red btn-sm" onclick="deleteComment('${id}','teacher')">🗑 삭제</button>
@@ -1788,6 +1803,14 @@ function renderCommentTab(id,md,locked){
         <div id="ai-draft-area"></div>
         <textarea id="tcmt" rows="8"
           style="width:100%;resize:vertical;min-height:140px;font-size:14px;line-height:1.6;padding:10px;border:1px solid #d0d6e0;border-radius:6px">${tcmt}</textarea>
+        <div style="margin-top:8px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <div style="font-size:12px;font-weight:700;color:#888">한국어 번역</div>
+            <button class="btn btn-ghost btn-xs" onclick="autoTranslateComment()" style="font-size:11px">🌐 자동 번역</button>
+          </div>
+          <textarea id="tcmt-ko" rows="5" placeholder="'자동 번역' 버튼을 클릭하세요..."
+            style="width:100%;resize:vertical;min-height:100px;font-size:13px;line-height:1.6;padding:10px;border:1px solid #d0d6e0;border-radius:6px">${md.teacherCommentKo||""}</textarea>
+        </div>
         <div style="display:flex;gap:6px;margin-top:8px" class="no-print">
           <button class="btn btn-ghost btn-sm" onclick="switchCommentView('teacher')">취소</button>
           <button class="btn btn-primary btn-sm" onclick="saveComment('${id}','teacher')">💾 저장</button>
@@ -1798,6 +1821,14 @@ function renderCommentTab(id,md,locked){
       return `<div id="ai-draft-area"></div>
       <textarea id="tcmt" rows="8" placeholder="${teacherName} 선생님의 코멘트를 입력하세요..."
         style="width:100%;resize:vertical;min-height:140px;font-size:14px;line-height:1.6;padding:10px;border:1px solid #d0d6e0;border-radius:6px"></textarea>
+      <div style="margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:12px;font-weight:700;color:#888">한국어 번역</div>
+          <button class="btn btn-ghost btn-xs" onclick="autoTranslateComment()" style="font-size:11px">🌐 자동 번역</button>
+        </div>
+        <textarea id="tcmt-ko" rows="5" placeholder="'자동 번역' 버튼을 클릭하세요..."
+          style="width:100%;resize:vertical;min-height:100px;font-size:13px;line-height:1.6;padding:10px;border:1px solid #d0d6e0;border-radius:6px"></textarea>
+      </div>
       <div style="display:flex;gap:6px;margin-top:8px" class="no-print">
         <button class="btn btn-ghost btn-xs" onclick="genAIDraft('${id}')">✨ AI 초안</button>
         <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="saveComment('${id}','teacher')">💾 저장</button>
@@ -2590,7 +2621,7 @@ function renderRpt(id){
     <div class="stu-avatar" style="background:${CLS_COLOR[s.cls]}">${s.name[0]}</div>
     <div style="flex:1;font-size:15px;font-weight:700;color:var(--navy)">${s.name} ${s.ename} — 보고서</div>
     <button class="btn btn-ghost btn-sm no-print" onclick="shareReport('${id}')">🔗 링크</button>
-    <button class="btn btn-gold btn-sm no-print" onclick="window.print()">🖨 인쇄</button>
+    <button class="btn btn-gold btn-sm no-print" onclick="printReport()">🖨 인쇄</button>
   </div>`;
   html+=`<div class="rpt-print-main">${renderRptMain(id,md)}</div>`;
   document.getElementById("main").innerHTML=html;
@@ -2711,19 +2742,40 @@ function renderRptMain(id,md){
     </tr>`;
   }
 
+  // SR 인라인 (별도 rpt-wrap 제거)
+  const srInline=(()=>{
+    const sr=md.sr||{};
+    if(!sr.ss&&!sr.pr) return "";
+    return '<div class="rpt2-section"><div class="rpt2-section-title">📋 SR TEST RESULTS</div>'
+      +'<div style="font-size:11px;color:#C9A84C;margin-bottom:6px;font-weight:600">SR Test Date: <b>'+(fmtSrDate(sr.date))+'</b></div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="background:#1A3169;color:#C9A84C">'
+      +'<th style="padding:5px 8px;text-align:center">Scale Score (SS)</th>'
+      +'<th style="padding:5px 8px;text-align:center">Percentile Rank (PR)</th>'
+      +'<th style="padding:5px 8px;text-align:center">Grade Equiv. (GE)</th>'
+      +'<th style="padding:5px 8px;text-align:center">IRL</th>'
+      +'</tr></thead>'
+      +'<tbody><tr style="background:#f8f9ff;text-align:center">'
+      +'<td style="padding:6px;font-weight:800;font-size:14px">'+(sr.ss||"—")+'</td>'
+      +'<td style="padding:6px;font-weight:800;font-size:14px">'+(sr.pr||"—")+'</td>'
+      +'<td style="padding:6px;font-weight:800;font-size:14px">'+(sr.ge||"—")+'</td>'
+      +'<td style="padding:6px;font-weight:800;font-size:14px">'+(sr.irl||"—")+'</td>'
+      +'</tr></tbody></table></div>';
+  })();
+
   html+=`</tbody></table></div>
     </div>
 
-    <!-- ══ SR TEST RESULTS ══ -->
-    ${renderRptSR(id,md)}
+    <!-- ══ SR TEST RESULTS (인라인) ══ -->
+    ${srInline}
 
     <!-- ══ PERFORMANCE ANALYSIS ══ -->
-    <div class="rpt2-section">
+    <div class="rpt2-section rpt-chart-section" style="page-break-after:always;break-after:page">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
-      <div style="position:relative;height:180px;margin-bottom:8px"><canvas id="rpt-main-bar"></canvas></div>
-      <div id="rpt-charts-row" style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
-        <div id="rpt-radar-wrap" style="position:relative;height:165px"><canvas id="rpt-main-radar"></canvas></div>
-        <div style="position:relative;height:165px"><canvas id="rpt-main-progress"></canvas></div>
+      <div class="rpt-bar-wrap" style="position:relative;height:240px;margin-bottom:8px"><canvas id="rpt-main-bar"></canvas></div>
+      <div class="rpt-btm-row" id="rpt-charts-row" style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
+        <div id="rpt-radar-wrap" style="position:relative;height:220px"><canvas id="rpt-main-radar"></canvas></div>
+        <div style="position:relative;height:220px"><canvas id="rpt-main-progress"></canvas></div>
       </div>
     </div>
   </div>`;
@@ -2868,6 +2920,10 @@ function renderRptComment(id,md){
         Homeroom Teacher
       </div>
       <div style="font-size:13px;line-height:1.9;color:#333;padding-left:2px">${tcmt.replace(/\n/g,"<br>")}</div>
+      ${md.teacherCommentKo?`<div style="margin-top:8px;padding:8px 12px;background:#f8f9ff;border-left:3px solid #1A3169;border-radius:0 6px 6px 0">
+        <div style="font-size:10px;color:#888;margin-bottom:4px">한국어 번역</div>
+        <div style="font-size:12px;line-height:1.8;color:#444">${md.teacherCommentKo.replace(/\n/g,"<br>")}</div>
+      </div>`:""}
     </div>`;
   }
   if(acmt){
@@ -2889,35 +2945,7 @@ function renderRptComment(id,md){
   const adminSignImg=SIGN_IMGS["admin"]||"";
   const isAdmin=user?.role==="admin";
 
-  html+=`
-    <div class="rpt2-section" style="margin-top:0">
-      <div class="rpt2-section-title">✍️ CONFIRMATION & SIGNATURES</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <!-- 담임 서명 -->
-        <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px">
-          <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Homeroom Teacher</div>
-          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px;display:flex;align-items:center;justify-content:center">
-            ${tchrSignImg?`<img src="${tchrSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`:""}
-          </div>
-          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
-        </div>
-        <!-- Head Teacher 서명: 빈칸 -->
-        <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px">
-          <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Head Teacher</div>
-          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px"></div>
-          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
-        </div>
-        <!-- Academy Director 서명: 관리자 삽입 -->
-        <div style="border:1px solid #e0e4ec;border-radius:8px;padding:14px" id="dir-sign-box">
-          <div style="font-size:12px;font-weight:700;color:#1A3169;margin-bottom:8px">Academy Director</div>
-          <div style="height:48px;border-bottom:1px solid #ddd;margin-bottom:8px;display:flex;align-items:center;justify-content:center" id="dir-sign-area">
-            ${adminSignImg?`<img src="${adminSignImg}" style="max-height:46px;max-width:100%;object-fit:contain">`:`<span></span>`}
-          </div>
-          <div style="font-size:11px;color:#aaa;font-style:italic">Signature</div>
-        </div>
-      </div>
-    </div>
-  </div>`;
+  html+=`</div>`;
 
   // ── NOTICE 섹션 (전체 공통 공지) ──
   const globalNotice=(settings.globalNotice||{})[curMonth]||"";
@@ -2960,7 +2988,12 @@ function renderRptGraph(id){
 }
 
 // ── 탭0: 보고서 메인 차트 ──
+function printReport(){
+  window.print();
+}
+
 function drawMainCharts(id){
+  window._lastRptId=id;
   const s=students[id];
   const cls=s?.cls||"";
   const mds=s.monthlyData||{};
@@ -3320,9 +3353,37 @@ async function deleteNotice(id){
   showToast("공지 삭제 완료");
   renderInp(id);
 }
+async function autoTranslateComment(){
+  const eng=document.getElementById("tcmt")?.value?.trim();
+  if(!eng){ showToast("먼저 영어 코멘트를 입력하세요"); return; }
+  const koEl=document.getElementById("tcmt-ko");
+  if(!koEl) return;
+  koEl.value="번역 중...";
+  koEl.disabled=true;
+  try{
+    const url="https://api.mymemory.translated.net/get?q="+encodeURIComponent(eng)+"&langpair=en|ko&de=hyogeon.hwang@gmail.com";
+    const res=await fetch(url);
+    const data=await res.json();
+    const translated=data.responseData?.translatedText||"";
+    if(translated&&data.responseStatus===200){
+      koEl.value=translated;
+      showToast("✅ 번역 완료");
+    } else {
+      koEl.value="";
+      showToast("번역 실패. 다시 시도하세요");
+    }
+  }catch(e){
+    koEl.value="";
+    showToast("번역 오류: "+e.message);
+  } finally {
+    koEl.disabled=false;
+  }
+}
+
 async function saveComment(id,who){
   const val=document.getElementById(who==="teacher"?"tcmt":"acmt")?.value||"";
   if(!val.trim()){showToast("내용을 입력하세요");return;}
+  const koVal=who==="teacher"?(document.getElementById("tcmt-ko")?.value||""):"";
   const label=who==="teacher"?"담임":"Head Teacher";
   const preview=val.length>60?val.slice(0,60)+"...":val;
   confirmSavePopup(`💬 ${label} 코멘트 저장`,[
@@ -3330,7 +3391,12 @@ async function saveComment(id,who){
   ],async()=>{
     const now=new Date().toISOString();
     const update={};
-    if(who==="teacher"){update.teacherComment=val;update.teacherCommentAt=now;}
+    if(who==="teacher"){
+      update.teacherComment=val;
+      update.teacherCommentAt=now;
+      if(koVal) update.teacherCommentKo=koVal;
+      else update.teacherCommentKo="";
+    }
     else{update.adminComment=val;update.adminCommentAt=now;}
     await saveStudentMD(id,update);
     showToast("코멘트 저장 완료 ✓");
@@ -5967,8 +6033,32 @@ document.addEventListener("DOMContentLoaded",async()=>{
       [b,r,p].forEach(function(el){if(el){var ch=Chart.getChart(el);if(ch)ch.resize();}});
     }
   }
-  window.addEventListener('beforeprint',function(){ setChartH(160,145,145); });
-  window.addEventListener('afterprint', function(){ setChartH(180,165,165); });
+  function calcAndSetChartH(){
+    var b = document.getElementById('rpt-main-bar');
+    if(!b) return;
+    var section = b.closest ? b.closest('.rpt2-section') : null;
+    if(!section) return;
+
+    // 차트 섹션 위 모든 형제 높이 합산 (실제 화면 기준)
+    var usedH = 0;
+    var parent = section.parentElement;
+    if(parent){
+      var el = parent.firstElementChild;
+      while(el && el !== section){
+        usedH += el.offsetHeight || 0;
+        el = el.nextElementSibling;
+      }
+    }
+    // 인쇄 축소 비율 보정 + 섹션 패딩+제목 (~50px)
+    // A4 인쇄 가용 높이 px (10mm 여백 기준)
+    var pageH = Math.round(277 * 3.7795); // 277mm to px
+    var remaining = pageH - usedH - 60;
+    var barH = Math.max(130, Math.round(remaining * 0.43));
+    var btmH = Math.max(110, Math.round(remaining * 0.50));
+    setChartH(barH, btmH, btmH);
+  }
+  window.addEventListener('beforeprint', function(){ setChartH(258,238,238); });
+  window.addEventListener('afterprint',  function(){ setChartH(240,220,220); });
 })();
 </script>
 </body>
