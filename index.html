@@ -2718,12 +2718,12 @@ function renderRptMain(id,md){
     ${renderRptSR(id,md)}
 
     <!-- ══ PERFORMANCE ANALYSIS ══ -->
-    <div class="rpt2-section" style="break-inside:avoid;page-break-inside:avoid">
+    <div class="rpt2-section">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
-      <div style="position:relative;height:265px;margin-bottom:10px"><canvas id="rpt-main-bar"></canvas></div>
+      <div style="position:relative;height:180px;margin-bottom:8px"><canvas id="rpt-main-bar"></canvas></div>
       <div id="rpt-charts-row" style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
-        <div id="rpt-radar-wrap" style="position:relative;height:245px"><canvas id="rpt-main-radar"></canvas></div>
-        <div style="position:relative;height:245px"><canvas id="rpt-main-progress"></canvas></div>
+        <div id="rpt-radar-wrap" style="position:relative;height:165px"><canvas id="rpt-main-radar"></canvas></div>
+        <div style="position:relative;height:165px"><canvas id="rpt-main-progress"></canvas></div>
       </div>
     </div>
   </div>`;
@@ -2752,7 +2752,7 @@ function renderRptEval(ev){
   const maxTotal=EVAL_DOMAINS.length*5;
   const pct=maxTotal>0?Math.round(total/maxTotal*100):0;
 
-  let html=`<div class="rpt-wrap"><div class="rpt2-section" style="break-before:page;page-break-before:always">
+  let html=`<div class="rpt-wrap"><div class="rpt2-section">
     <div class="rpt2-section-title">⭐ ATTITUDE & PARTICIPATION · ★ = 1 pt (5 pts max per category)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">`;
 
@@ -5967,8 +5967,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
       [b,r,p].forEach(function(el){if(el){var ch=Chart.getChart(el);if(ch)ch.resize();}});
     }
   }
-  window.addEventListener('beforeprint',function(){ setChartH(215,195,195); });
-  window.addEventListener('afterprint', function(){ setChartH(265,245,245); });
+  window.addEventListener('beforeprint',function(){ setChartH(160,145,145); });
+  window.addEventListener('afterprint', function(){ setChartH(180,165,165); });
 })();
 </script>
 </body>
