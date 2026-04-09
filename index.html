@@ -198,10 +198,10 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
   .rpt-header-inner{padding:10px 14px!important}
 
   /* 인쇄용 차트 높이 */
-  #rpt-main-bar{height:258px!important}
-  #rpt-main-radar{height:238px!important}
-  #rpt-main-progress{height:238px!important}
-  .rpt-bar-wrap{height:258px!important}
+  #rpt-main-bar{height:232px!important}
+  #rpt-main-radar{height:212px!important}
+  #rpt-main-progress{height:212px!important}
+  .rpt-bar-wrap{height:232px!important}
 
 
 
@@ -3148,6 +3148,7 @@ function drawMainCharts(id){
         title:{display:false},
         legend:{
           position:"bottom",
+          align:"center",
           labels:{
             boxWidth:8,font:{size:8},padding:3,
             generateLabels:(chart)=>[
@@ -6057,7 +6058,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
     var btmH = Math.max(110, Math.round(remaining * 0.50));
     setChartH(barH, btmH, btmH);
   }
-  window.addEventListener('beforeprint', function(){ setChartH(258,238,238); });
+  window.addEventListener('beforeprint', function(){ setChartH(232,212,212); });
   window.addEventListener('afterprint',  function(){ setChartH(240,220,220); });
 })();
 </script>
