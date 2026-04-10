@@ -3367,6 +3367,46 @@ async function deleteKoTranslation(id){
   });
 }
 
+function showBookSearchResults(items, query){
+  const o=document.createElement("div");
+  o.className="overlay";
+  o.style.zIndex="10002";
+  let html='<div class="modal" style="max-width:480px;max-height:80vh;overflow-y:auto">';
+  html+='<h2 style="font-size:15px;margin-bottom:4px">📚 검색 결과</h2>';
+  html+='<div style="font-size:12px;color:#888;margin-bottom:12px">원하는 책을 선택하세요</div>';
+  items.forEach((item,i)=>{
+    const info=item.volumeInfo||{};
+    const title=info.title||"제목 없음";
+    const author=(info.authors||[]).join(", ")||"저자 미상";
+    const thumb=info.imageLinks?.smallThumbnail||"";
+    html+=`<div onclick="selectBookResult(${i})" style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #e8ecf2;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background='#fff'">`;
+    html+=thumb?`<img src="${thumb}" style="width:40px;height:56px;object-fit:cover;border-radius:4px;flex-shrink:0">`:`<div style="width:40px;height:56px;background:#e8ecf2;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📖</div>`;
+    html+=`<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#1A3169;margin-bottom:2px;word-break:break-word">${title}</div><div style="font-size:11px;color:#888">${author}</div></div></div>`;
+  });
+  html+=`<div style="border-top:1px solid #eee;padding-top:10px;margin-top:4px"><button class="btn btn-ghost btn-sm" style="width:100%" onclick="selectBookManual('${query.replace(/'/g,"\\'")}')">📝 "${query}" 그대로 추가</button></div>`;
+  html+='<div class="modal-footer"><button class="btn btn-ghost" onclick="this.closest(\'.overlay\').remove()">취소</button></div>';
+  html+='</div>';
+  o.innerHTML=html;
+  window._bookSearchItems=items;
+  document.body.appendChild(o);
+}
+
+function selectBookResult(i){
+  const info=(window._bookSearchItems[i]||{}).volumeInfo||{};
+  const book={barcode:"manual_"+Date.now(), title:info.title||"제목 없음", author:(info.authors||[]).join(", ")||"", thumbnail:info.imageLinks?.smallThumbnail||""};
+  window._loanBooks.push(book);
+  renderLoanBookList();
+  document.querySelector(".overlay[style*='10002']")?.remove();
+  showToast("✅ 추가됨: "+book.title);
+}
+
+function selectBookManual(title){
+  window._loanBooks.push({barcode:"manual_"+Date.now(), title, author:"", thumbnail:""});
+  renderLoanBookList();
+  document.querySelector(".overlay[style*='10002']")?.remove();
+  showToast("✅ 직접 추가됨");
+}
+
 async function autoTranslateComment(){
   const eng=document.getElementById("tcmt")?.value?.trim();
   if(!eng){ showToast("먼저 영어 코멘트를 입력하세요"); return; }
@@ -4690,7 +4730,7 @@ function openLoanModal(preSelId=""){
     <div style="margin-bottom:12px">
       <label style="font-size:12px;font-weight:700;color:var(--navy)">바코드 스캔</label>
       <div style="display:flex;gap:8px;margin-top:4px">
-        <input type="text" id="loan-barcode" placeholder="바코드 스캔 또는 직접 입력 후 Enter"
+        <input type="text" id="loan-barcode" placeholder="바코드 스캔 or 책 제목 직접 입력 후 Enter"
           style="flex:1;border:1px solid #d0d6e0;border-radius:8px;padding:8px;font-size:13px"
           onkeydown="if(event.key==='Enter'){scanBook();event.preventDefault();}">
         <button class="btn btn-primary btn-sm" onclick="scanBook()">추가</button>
@@ -4790,12 +4830,43 @@ function updateDueDate(){
 async function scanBook(){
   const input=document.getElementById("loan-barcode");
   const barcode=input.value.trim();
-  if(!barcode){showToast("바코드를 입력하세요");return;}
+  if(!barcode){showToast("바코드 또는 책 제목을 입력하세요");return;}
   const maxAdd=window._loanMaxAdd||bookSettings.maxBooks;
   if(window._loanBooks.length>=maxAdd){
     showToast("추가 가능한 권수를 초과했습니다 (최대 "+maxAdd+"권 추가 가능)");
     input.value=""; return;
   }
+
+  // 숫자로만 이루어진 경우 → 바코드로 처리, 아니면 제목 검색
+  const isBarcode=/^\d+$/.test(barcode);
+
+  if(!isBarcode){
+    if(window._loanBooks.find(b=>b.title===barcode)){
+      showToast("이미 추가된 책입니다"); input.value=""; return;
+    }
+    input.value="";
+    input.disabled=true;
+    showToast("📚 제목으로 검색 중...");
+    try{
+      const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(barcode)}&maxResults=8&key=AIzaSyDbC1OgFzJNGArWj64n-tjp7X5_lbs9QTc`);
+      const data=await res.json();
+      input.disabled=false;
+      input.focus();
+      if(data.items&&data.items.length){
+        // 검색 결과 팝업 표시
+        showBookSearchResults(data.items, barcode);
+        return;
+      }
+    }catch(e){}
+    input.disabled=false;
+    input.focus();
+    // 검색 결과 없으면 제목만으로 직접 추가
+    window._loanBooks.push({barcode:"manual_"+Date.now(), title:barcode, author:"", thumbnail:""});
+    renderLoanBookList();
+    showToast("✅ 직접 추가됨");
+    return;
+  }
+
   if(window._loanBooks.find(b=>b.barcode===barcode)){
     showToast("이미 추가된 책입니다");
     input.value=""; return;
