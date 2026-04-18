@@ -4606,8 +4606,13 @@ async function renderBookLoan(){
 
   // 기한 초과 알림
   if(Object.keys(overdueBystu).length){
+    const cnt=Object.keys(overdueBystu).length;
     html+="<div style=\"background:#fff0f0;border:2px solid #fca5a5;border-radius:8px;padding:12px;margin-bottom:12px\">";
-    html+="<div style=\"font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px\">🔴 반납 기한 초과 — 즉시 확인 필요</div>";
+    html+="<div style=\"display:flex;justify-content:space-between;align-items:center;cursor:pointer\" onclick=\"toggleBanner('overdue-list')\">";
+    html+="<div style=\"font-size:13px;font-weight:700;color:#c0392b\">🔴 반납 기한 초과 — 즉시 확인 필요 <span style=\"font-size:12px;background:#fca5a5;color:#7f1d1d;border-radius:10px;padding:1px 8px;margin-left:4px\">"+cnt+"명</span></div>";
+    html+="<span id=\"overdue-arrow\" style=\"font-size:12px;color:#c0392b\">▼</span>";
+    html+="</div>";
+    html+="<div id=\"overdue-list\" style=\"margin-top:8px;display:none\">";
     Object.values(overdueBystu).forEach(g=>{
       const maxDays=Math.max(...g.books.map(b=>Math.ceil((new Date()-new Date(b.dueDate))/(1000*60*60*24))));
       html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fca5a5;font-size:13px\">";
@@ -4615,13 +4620,18 @@ async function renderBookLoan(){
       html+="<button class=\"btn btn-ghost btn-xs\" style=\"color:#c0392b\" onclick=\"openReturnModal('"+g.books[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
       html+="</div>";
     });
-    html+="</div>";
+    html+="</div></div>";
   }
 
   // 임박 알림
   if(Object.keys(dueSoonBystu).length){
+    const cnt=Object.keys(dueSoonBystu).length;
     html+="<div style=\"background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px\">";
-    html+="<div style=\"font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px\">🟡 반납 임박</div>";
+    html+="<div style=\"display:flex;justify-content:space-between;align-items:center;cursor:pointer\" onclick=\"toggleBanner('duesoon-list')\">";
+    html+="<div style=\"font-size:13px;font-weight:700;color:#92400e\">🟡 반납 임박 <span style=\"font-size:12px;background:#fcd34d;color:#78350f;border-radius:10px;padding:1px 8px;margin-left:4px\">"+cnt+"명</span></div>";
+    html+="<span id=\"duesoon-arrow\" style=\"font-size:12px;color:#92400e\">▼</span>";
+    html+="</div>";
+    html+="<div id=\"duesoon-list\" style=\"margin-top:8px;display:none\">";
     Object.values(dueSoonBystu).forEach(g=>{
       const minDays=Math.min(...g.books.map(b=>Math.ceil((new Date(b.dueDate)-new Date())/(1000*60*60*24))));
       html+="<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #fcd34d;font-size:13px\">";
@@ -4629,7 +4639,7 @@ async function renderBookLoan(){
       html+="<button class=\"btn btn-ghost btn-xs\" onclick=\"openReturnModal('"+g.books[0].studentId+"');setBookBtn('btn-return')\">반납</button>";
       html+="</div>";
     });
-    html+="</div>";
+    html+="</div></div>";
   }
 
   // 필터 바
@@ -4648,6 +4658,7 @@ async function renderBookLoan(){
   html+="</select>";
   html+="<select onchange=\"window._bookFilterStatus=this.value;renderBookLoan()\" style=\"border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px\">";
   html+="<option value=\"current\""+(fStatus==="current"?" selected":"")+">대여중</option>";
+  html+="<option value=\"overdue\""+(fStatus==="overdue"?" selected":"")+">기한초과</option>";
   html+="<option value=\"returned\""+(fStatus==="returned"?" selected":"")+">반납완료</option>";
   html+="<option value=\"all\""+(fStatus==="all"?" selected":"")+">전체</option>";
   html+="</select>";
@@ -4730,6 +4741,7 @@ function renderBookLoanTable(){
   if(fCls!=="all") filteredStus=filteredStus.filter(g=>g.cls===fCls);
   if(fName) filteredStus=filteredStus.filter(g=>g.studentName.includes(fName));
   if(fStatus==="current") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"));
+  if(fStatus==="overdue") filteredStus=filteredStus.filter(g=>g.books.some(b=>b.status==="active"&&isOverdue(b.dueDate)));
   if(fStatus==="returned") filteredStus=filteredStus.filter(g=>g.books.every(b=>b.status==="returned"));
   const el=document.getElementById("book-loan-table");
   if(el) el.innerHTML=getBookLoanTableHTML(filteredStus);
@@ -4810,6 +4822,16 @@ function openLoanModal(preSelId=""){
       }
     });
   },100);
+}
+
+function toggleBanner(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  const isHidden=el.style.display==="none";
+  el.style.display=isHidden?"block":"none";
+  const arrowId=id==="overdue-list"?"overdue-arrow":"duesoon-arrow";
+  const arrow=document.getElementById(arrowId);
+  if(arrow) arrow.textContent=isHidden?"▲":"▼";
 }
 
 function filterBookName(){
