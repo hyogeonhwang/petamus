@@ -5296,6 +5296,33 @@ async function submitReturn(){
 }
 
 // ── 학생 대여 이력 팝업 ──
+async function cancelLoan(loanId, stuId, showAll){
+  confirmSavePopup("🗑 대여 취소",[
+    '<span style="font-size:13px;color:#555">이 대여 기록을 완전히 삭제합니다.<br>독서 이력에도 남지 않습니다.<br><br><b style="color:#c0392b">취소 후 복구가 불가합니다.</b></span>'
+  ], async()=>{
+    const key=loanId.includes("_")? loanId.split("_")[0] : loanId;
+    // 구형식(books 배열) 처리
+    if(loanId.includes("_")){
+      const idx=parseInt(loanId.split("_")[1]);
+      const snap=await db.ref("bookLoans/"+key+"/books").once("value");
+      const books=snap.val()||[];
+      books.splice(idx,1);
+      if(books.length===0){
+        await db.ref("bookLoans/"+key).remove();
+      } else {
+        await db.ref("bookLoans/"+key+"/books").set(books);
+      }
+    } else {
+      await db.ref("bookLoans/"+loanId).remove();
+    }
+    await loadBookData();
+    showToast("✅ 대여 취소 완료");
+    // 팝업 갱신
+    document.querySelector(".overlay")?.remove();
+    openStudentLoanHistory(stuId, showAll==="true");
+  });
+}
+
 async function openStudentLoanHistory(stuId, showAll=false){
   if(!bookLoans.length) await loadBookData();
   const stu=students[stuId];
@@ -5321,6 +5348,10 @@ async function openStudentLoanHistory(stuId, showAll=false){
     h+='<div style="font-size:11px;color:#666;margin-top:2px">대여: '+l.loanDate+(l.returnDate?' · 반납: '+l.returnDate:l.dueDate?' · 기한: '+l.dueDate:'')+'</div></div>';
     h+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'+badge;
     if(l.quizDone!==undefined) h+='<span style="font-size:10px;background:'+(l.quizDone?"#d1fae5":"#fee2e2")+';color:'+(l.quizDone?"#065f46":"#991b1b")+';border-radius:8px;padding:2px 6px">'+(l.quizDone?"퀴즈완료":"미완료")+'</span>';
+    // 대여중인 경우에만 대여취소 버튼
+    if(l.status==="active"){
+      h+='<button onclick="cancelLoan(\''+l.id+'\',\''+stuId+'\',\''+showAll+'\')" style="font-size:10px;color:#c0392b;background:#fff0f0;border:1px solid #fca5a5;border-radius:6px;padding:2px 8px;cursor:pointer;margin-top:2px">🗑 취소</button>';
+    }
     h+='</div></div>';
     return h;
   }
