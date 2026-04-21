@@ -5116,6 +5116,22 @@ function openReturnModal(preSelId=""){
   o.id="return-modal";
   o.innerHTML=`<div class="modal" style="max-width:500px">
     <h2>📥 반납 처리</h2>
+
+    <!-- 바코드 스캔 -->
+    <div style="margin-bottom:14px;padding:10px 12px;background:#f8f9ff;border-radius:8px;border:1px solid #e0e4ec">
+      <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">📷 바코드 스캔으로 반납</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="return-barcode" placeholder="바코드 스캔 또는 ISBN 입력 후 Enter" autocomplete="off"
+          style="flex:1;border:1px solid #d0d6e0;border-radius:8px;padding:8px;font-size:13px;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter'){scanReturnBarcode();event.preventDefault();}">
+        <button class="btn btn-primary btn-sm" onclick="scanReturnBarcode()">조회</button>
+      </div>
+      <div id="return-barcode-result" style="margin-top:8px"></div>
+    </div>
+
+    <div style="text-align:center;font-size:12px;color:#aaa;margin-bottom:10px">— 또는 이름으로 검색 —</div>
+
+    <!-- 이름 검색 -->
     <div style="margin-bottom:12px;position:relative">
       <label style="font-size:12px;font-weight:700;color:var(--navy)">학생 검색 (대여 중인 학생만)</label>
       <input type="text" id="return-stu-search" placeholder="이름 입력..." autocomplete="off"
@@ -5137,7 +5153,7 @@ function openReturnModal(preSelId=""){
     const g=activeBystu[preSelId];
     selectReturnStu(preSelId,g.studentName||g.name,g.cls,g.loans.length);
   }
-  document.getElementById("return-stu-search").focus();
+  document.getElementById("return-barcode").focus();
   setTimeout(()=>{
     document.addEventListener("click",function closeDD(e){
       if(!document.getElementById("return-modal")) return document.removeEventListener("click",closeDD);
@@ -5147,6 +5163,48 @@ function openReturnModal(preSelId=""){
       }
     });
   },100);
+}
+
+function scanReturnBarcode(){
+  const input=document.getElementById("return-barcode");
+  const barcode=input?.value.trim();
+  if(!barcode) return;
+  const resultEl=document.getElementById("return-barcode-result");
+
+  // 해당 바코드로 현재 대여 중인 loan 찾기
+  const matched=bookLoans.filter(l=>l.status==="active"&&l.barcode===barcode);
+
+  if(!matched.length){
+    resultEl.innerHTML='<div style="font-size:12px;color:#c0392b;padding:6px">해당 바코드로 대여 중인 책이 없습니다</div>';
+    return;
+  }
+
+  if(matched.length===1){
+    // 1명 → 바로 학생 선택
+    const l=matched[0];
+    resultEl.innerHTML='';
+    input.value='';
+    selectReturnStu(l.studentId, l.studentName, l.cls, matched.length);
+    document.getElementById("return-stu-search").value=l.studentName;
+    showToast("✅ "+l.studentName+" · "+l.title+" 조회 완료");
+  } else {
+    // 2명 이상 → 목록 표시
+    resultEl.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">대여 중인 학생을 선택하세요:</div>'
+      +matched.map(l=>'<div onclick="selectReturnBarcodeMatch(\''+l.studentId+'\',\''+l.studentName+'\',\''+l.cls+'\')" '
+        +'style="padding:8px 10px;background:#fff;border:1px solid #e0e4ec;border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;align-items:center" '
+        +'onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'#fff\'">'
+        +'<span><b>'+l.studentName+'</b> ('+l.cls+'반)</span>'
+        +'<span style="font-size:11px;color:#888">'+l.title+'</span>'
+        +'</div>').join('');
+  }
+}
+
+function selectReturnBarcodeMatch(stuId, name, cls){
+  document.getElementById("return-barcode-result").innerHTML='';
+  document.getElementById("return-barcode").value='';
+  const activeLoans=bookLoans.filter(l=>l.status==="active"&&l.studentId===stuId);
+  selectReturnStu(stuId, name, cls, activeLoans.length);
+  document.getElementById("return-stu-search").value=name;
 }
 
 function filterReturnStu(){
