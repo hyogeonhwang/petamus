@@ -5283,14 +5283,13 @@ async function submitReturn(){
     return db.ref("bookLoans/"+key).update({status:"returned",returnDate:today,quizDone});
   });
   await Promise.all(saves);
-  if(quizDoneCount>0){
-    const month=toReturn[0].month||curMonth;
-    const mdRef=db.ref("students/"+stuId+"/monthlyData/"+month+"/arBooks");
-    const snap=await mdRef.once("value");
-    await mdRef.set((snap.val()||0)+quizDoneCount);
-  }
+  // 반납 시 AR 카운트 (퀴즈 여부 무관, 반납 권수 기준)
+  const month=toReturn[0].month||curMonth;
+  const mdRef=db.ref("students/"+stuId+"/monthlyData/"+month+"/arBooks");
+  const snap=await mdRef.once("value");
+  await mdRef.set((snap.val()||0)+toReturn.length);
   const stu=students[stuId];
-  showToast("✅ "+(stu?.name||"")+" "+toReturn.length+"권 반납 완료 · AR퀴즈 "+quizDoneCount+"권 독서 기록 추가");
+  showToast("✅ "+(stu?.name||"")+" "+toReturn.length+"권 반납 완료"+(quizDoneCount>0?" · AR퀴즈 "+quizDoneCount+"권 완료":""));
   document.getElementById("return-modal").remove();
   await renderBookLoan();
 }
