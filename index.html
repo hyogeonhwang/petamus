@@ -5283,9 +5283,9 @@ async function submitReturn(){
     return db.ref("bookLoans/"+key).update({status:"returned",returnDate:today,quizDone});
   });
   await Promise.all(saves);
-  // 반납 시 AR 카운트 (퀴즈 여부 무관, 반납 권수 기준)
-  const month=toReturn[0].month||curMonth;
-  const mdRef=db.ref("students/"+stuId+"/monthlyData/"+month+"/arBooks");
+  // 반납일 기준 월로 AR 카운트
+  const returnMonth=today.slice(0,7);
+  const mdRef=db.ref("students/"+stuId+"/monthlyData/"+returnMonth+"/arBooks");
   const snap=await mdRef.once("value");
   await mdRef.set((snap.val()||0)+toReturn.length);
   const stu=students[stuId];
