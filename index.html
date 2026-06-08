@@ -543,6 +543,8 @@ let curMonth=new Date().toISOString().slice(0,7);
 let students={};
 let PINS={...DEFAULT_PINS};
 let settings={};
+let reportMode="monthly"; // monthly | term
+let reportTerm=1;          // 1~4 (term 모드일 때 사용)
 let consCache={}; // stuId → 상담 건수 캐시
 let TEACHER_LIST={};  // id → {name, pin, cls} 교사 독립 저장소
 let SIGN_IMGS={};     // cls → base64 서명 이미지, admin → 원장 서명
@@ -2615,6 +2617,14 @@ async function confirmAssign(tchrId){
 
 
 let rptTab=0;
+function setReportMode(mode,id){
+  reportMode=mode;
+  renderRpt(id);
+}
+function setReportTerm(t,id){
+  reportTerm=+t;
+  renderRpt(id);
+}
 function renderRpt(id){
   const s=students[id];
   if(!s){document.getElementById("main").innerHTML="<div class='card'>학생 없음</div>";return;}
@@ -2625,6 +2635,18 @@ function renderRpt(id){
     <div style="flex:1;font-size:15px;font-weight:700;color:var(--navy)">${s.name} ${s.ename} — 보고서</div>
     <button class="btn btn-ghost btn-sm no-print" onclick="shareReport('${id}')">🔗 링크</button>
     <button class="btn btn-gold btn-sm no-print" onclick="printReport()">🖨 인쇄</button>
+  </div>
+  <div class="no-print" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 12px;background:#fff;border:1px solid #e0e4ec;border-radius:8px">
+    <span style="font-size:12px;font-weight:700;color:var(--gray)">보고서 양식</span>
+    <div style="display:inline-flex;border:1px solid #d0d6e0;border-radius:8px;overflow:hidden">
+      <button onclick="setReportMode('monthly','${id}')" style="border:none;cursor:pointer;font-size:12px;font-weight:700;padding:6px 12px;background:${reportMode==="monthly"?"var(--navy)":"#fff"};color:${reportMode==="monthly"?"#fff":"#555"}">월간 보고서</button>
+      <button onclick="setReportMode('term','${id}')" style="border:none;cursor:pointer;font-size:12px;font-weight:700;padding:6px 12px;background:${reportMode==="term"?"var(--navy)":"#fff"};color:${reportMode==="term"?"#fff":"#555"}">분기(Term) 보고서</button>
+    </div>
+    ${reportMode==="term"?`
+    <span style="font-size:12px;font-weight:700;color:var(--gray);margin-left:6px">Term</span>
+    <select onchange="setReportTerm(this.value,'${id}')" style="border:1px solid #d0d6e0;border-radius:6px;padding:5px 8px;font-size:12px;font-weight:700;color:var(--navy)">
+      ${[1,2,3,4].map(t=>`<option value="${t}" ${reportTerm===t?"selected":""}>Term ${t}</option>`).join("")}
+    </select>`:""}
   </div>`;
   html+=`<div class="rpt-print-main">${renderRptMain(id,md)}</div>`;
   document.getElementById("main").innerHTML=html;
@@ -2661,6 +2683,7 @@ function renderRptMain(id,md){
 
   // 반별 과목
   const clsSubs=getClsSubjects(s.cls);
+  const isTerm=(reportMode==="term");
 
   // 전체 평균
   const allScores=clsSubs.map(sub=>{
@@ -2677,7 +2700,7 @@ function renderRptMain(id,md){
         <img src="${LOGO}" alt="Petamus" style="width:40px;height:40px;border-radius:50%;background:#fff;padding:3px;object-fit:contain;flex-shrink:0">
         <div>
           <div style="font-size:12px;font-weight:800;color:#C9A84C;letter-spacing:.6px">PETAMUS INTERNATIONAL · English Language Academy</div>
-          <div style="font-size:9px;color:rgba(255,255,255,.65);margin-top:1px;letter-spacing:1px">MONTHLY STUDENT PROGRESS REPORT</div>
+          <div style="font-size:9px;color:rgba(255,255,255,.65);margin-top:1px;letter-spacing:1px">${isTerm?`TERM ${reportTerm} STUDENT PROGRESS REPORT`:"MONTHLY STUDENT PROGRESS REPORT"}</div>
         </div>
       </div>
       <div style="height:1px;background:rgba(201,168,76,.4);margin-bottom:8px"></div>
@@ -2691,7 +2714,7 @@ function renderRptMain(id,md){
 
     <!-- ══ Academic Performance ══ -->
     <div class="rpt2-section">
-      <div class="rpt2-section-title">📊 ACADEMIC PERFORMANCE · Subject Achievement by Category</div>
+      <div class="rpt2-section-title">${isTerm?"📊 TERM TEST PERFORMANCE · English Skills by Category":"📊 ACADEMIC PERFORMANCE · Subject Achievement by Category"}</div>
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
@@ -2701,7 +2724,7 @@ function renderRptMain(id,md){
             <col style="width:15%">
           </colgroup>
           <tr style="background:#1A3169;color:#C9A84C">
-            <th style="padding:5px 8px;text-align:left">Subject</th>
+            <th style="padding:5px 8px;text-align:left">${isTerm?"English Skills":"Subject"}</th>
             <th style="padding:5px 6px;text-align:center">Score</th>
             <th style="padding:5px 6px;text-align:center">Class Avg</th>
           </tr>
@@ -2715,7 +2738,7 @@ function renderRptMain(id,md){
     const bg=i%2===0?"#f8f9ff":"#fff";
     html+=`<tr style="background:${bg};border-bottom:1px solid #e8ecf2">
       <td style="padding:9px 10px;font-weight:700;color:#1A3169">
-        ${subS.label}<div style="font-size:10px;color:#888;font-weight:400">${subS.full}</div>
+        ${subS.label}${isTerm?"":`<div style="font-size:10px;color:#888;font-weight:400">${subS.full}</div>`}
       </td>
       <td style="padding:9px 8px;text-align:center;font-weight:800;font-size:15px">${d.score||"—"}</td>
       <td style="padding:9px 8px;text-align:center;font-weight:700;font-size:13px">
@@ -2915,7 +2938,10 @@ function renderRptComment(id,md){
   const acmt=md.adminComment||"";
   const tcmtAt=md.teacherCommentAt?md.teacherCommentAt.slice(0,10):"";
   const acmtAt=md.adminCommentAt?md.adminCommentAt.slice(0,10):"";
-  let html=`<div class="rpt-wrap"><div class="rpt2-section">
+  const showComment=(reportMode!=="term"); // Term Test 보고서에는 코멘트 섹션 미표시
+  let html="";
+  if(showComment){
+  html+=`<div class="rpt-wrap"><div class="rpt2-section">
     <div class="rpt2-section-title">💬 TEACHER'S OVERALL COMMENT</div>`;
   if(tcmt){
     html+=`<div style="margin-bottom:16px">
@@ -2949,6 +2975,7 @@ function renderRptComment(id,md){
   const isAdmin=user?.role==="admin";
 
   html+=`</div>`;
+  } // end if(showComment)
 
   // ── NOTICE 섹션 (전체 공통 공지) ──
   const globalNotice=(settings.globalNotice||{})[curMonth]||"";
