@@ -197,11 +197,11 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
   /* 헤더 축소 */
   .rpt-header-inner{padding:10px 14px!important}
 
-  /* 인쇄용 차트 높이 */
-  #rpt-main-bar{height:232px!important}
-  #rpt-main-radar{height:212px!important}
-  #rpt-main-progress{height:212px!important}
-  .rpt-bar-wrap{height:232px!important}
+  /* 인쇄용 차트 높이 (첫 페이지 하단 여백 ~2cm 채우기) */
+  #rpt-main-bar{height:272px!important}
+  #rpt-main-radar{height:247px!important}
+  #rpt-main-progress{height:247px!important}
+  .rpt-bar-wrap{height:272px!important}
 
 
 
@@ -6421,7 +6421,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
     var btmH = Math.max(110, Math.round(remaining * 0.50));
     setChartH(barH, btmH, btmH);
   }
-  window.addEventListener('beforeprint', function(){ setChartH(232,212,212); });
+  window.addEventListener('beforeprint', function(){ setChartH(272,247,247); });
   window.addEventListener('afterprint',  function(){ setChartH(240,220,220); });
 })();
 </script>
