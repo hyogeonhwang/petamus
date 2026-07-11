@@ -197,11 +197,48 @@ body{background:#f4f6f9;color:#1a2a4a;height:100vh;display:flex;flex-direction:c
   /* 헤더 축소 */
   .rpt-header-inner{padding:10px 14px!important}
 
-  /* 인쇄용 차트 높이 (첫 페이지 하단 여백 ~2cm 채우기) */
-  #rpt-main-bar{height:272px!important}
-  #rpt-main-radar{height:247px!important}
-  #rpt-main-progress{height:247px!important}
-  .rpt-bar-wrap{height:272px!important}
+  /* ══ 첫 페이지: 그래프가 남는 공간을 전부 채움 ══
+     · 성적표: 자연 높이 그대로 → 과목이 몇 개든 절대 잘리지 않음
+     · 그래프: flex 로 남는 공간 전부 흡수 → 하단 여유 없음
+     · 월간/분기 양식 모두 동일 규칙으로 자동 대응 */
+  .rpt-print-main > .rpt-wrap:first-child{
+    display:flex!important;
+    flex-direction:column!important;
+    height:275mm!important;   /* ← 하단이 남으면 키우고, 2페이지로 밀리면 줄이는 단일 조정값 */
+    max-height:275mm!important;
+    overflow:hidden!important;
+  }
+  .rpt-print-main > .rpt-wrap:first-child > .rpt2-header,
+  .rpt-print-main > .rpt-wrap:first-child > .rpt2-section:not(.rpt-chart-section){
+    flex:0 0 auto!important;
+  }
+  .rpt-print-main .rpt2-section > div[style*="overflow-x"]{overflow:visible!important}
+
+  .rpt-print-main > .rpt-wrap:first-child > .rpt-chart-section{
+    flex:1 1 auto!important;
+    display:flex!important;
+    flex-direction:column!important;
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+  .rpt-chart-section{margin-bottom:0!important;padding:4px 5px 3px!important}
+  .rpt-chart-section > .rpt2-section-title{margin-bottom:2px!important;padding-bottom:2px!important}
+  .rpt-chart-section .rpt-bar-wrap{margin-bottom:2px!important}
+  .rpt-chart-section > .rpt2-section-title{flex:0 0 auto!important}
+  .rpt-chart-section > .rpt-bar-wrap{
+    flex:52 1 0!important; height:auto!important; min-height:0!important;
+  }
+  .rpt-chart-section > .rpt-btm-row{
+    flex:48 1 0!important; height:auto!important; min-height:0!important;
+  }
+  .rpt-btm-row > div{height:auto!important;min-height:0!important}
+  /* 화면에서 이미 그려진 차트 비트맵을 인쇄 칸에 꽉 차게 늘림 (재렌더 타이밍 문제 회피) */
+  .rpt-chart-section canvas{
+    width:100%!important;
+    height:100%!important;
+    max-width:100%!important;
+    max-height:100%!important;
+  }
 
 
 
@@ -2799,7 +2836,7 @@ function renderRptMain(id,md){
     <div class="rpt2-section rpt-chart-section" style="page-break-after:always;break-after:page">
       <div class="rpt2-section-title">📈 PERFORMANCE ANALYSIS · Student Score vs. Class Average</div>
       <div class="rpt-bar-wrap" style="position:relative;height:240px;margin-bottom:8px"><canvas id="rpt-main-bar"></canvas></div>
-      <div class="rpt-btm-row" id="rpt-charts-row" style="display:grid;grid-template-columns:1fr 2.5fr;gap:8px">
+      <div class="rpt-btm-row" id="rpt-charts-row" style="display:grid;grid-template-columns:1.35fr 2.15fr;gap:8px">
         <div id="rpt-radar-wrap" style="position:relative;height:220px"><canvas id="rpt-main-radar"></canvas></div>
         <div style="position:relative;height:220px"><canvas id="rpt-main-progress"></canvas></div>
       </div>
@@ -3045,7 +3082,7 @@ function drawMainCharts(id){
   const radarWrap=document.getElementById("rpt-radar-wrap");
   const chartsRow=document.getElementById("rpt-charts-row");
   if(radarWrap) radarWrap.style.display=showRadar?"block":"none";
-  if(chartsRow) chartsRow.style.gridTemplateColumns=showRadar?"1fr 2.5fr":"1fr";
+  if(chartsRow) chartsRow.style.gridTemplateColumns=showRadar?"1.35fr 2.15fr":"1fr";
   if(mainBar&&window.Chart){
     // 과목별 개인 vs 반 평균 막대
     const subjLabels=clsS.map(sub=>sub.label);
@@ -3075,7 +3112,7 @@ function drawMainCharts(id){
       },
       scales:{
         y:{min:0,max:100,title:{display:true,text:"Score",font:{size:9},color:"#888"},ticks:{font:{size:9}},grid:{color:"#f0f0f0"}},
-        x:{ticks:{font:{size:10,weight:"600"}},grid:{display:false}}
+        x:{ticks:{font:{size:10,weight:"600"},maxRotation:0,minRotation:0,autoSkip:false},grid:{display:false}}
       }}});
   }
   if(mainRadar&&window.Chart){
@@ -3100,8 +3137,15 @@ function drawMainCharts(id){
         {label:"Class Average",data:radarClassAvg,backgroundColor:"rgba(201,168,76,.15)",borderColor:"#C9A84C",borderWidth:1.5,borderDash:[4,3],pointRadius:2,pointBackgroundColor:"#C9A84C"}
       ]
     },options:{responsive:true,maintainAspectRatio:false,
-      layout:{padding:{top:2,bottom:2,left:2,right:2}},
-      scales:{r:{min:0,max:100,ticks:{display:false,stepSize:20},grid:{color:"#e0e0e0"},angleLines:{color:"#ddd"},pointLabels:{font:{size:10,weight:"600"},color:"#333"}}},
+      layout:{padding:{top:2,bottom:2,left:6,right:6}},
+      scales:{r:{min:0,max:100,ticks:{display:false,stepSize:20},grid:{color:"#e0e0e0"},angleLines:{color:"#ddd"},pointLabels:{font:{size:10,weight:"600"},color:"#333",
+        callback:function(label){
+          if(typeof label==="string"&&label.length>8&&label.includes(" ")){
+            const i=label.lastIndexOf(" ");
+            return [label.slice(0,i),label.slice(i+1)];
+          }
+          return label;
+        }}}},
       plugins:{
         title:{display:false},
         legend:{position:"bottom",labels:{boxWidth:8,font:{size:8},padding:2}}
@@ -6421,8 +6465,22 @@ document.addEventListener("DOMContentLoaded",async()=>{
     var btmH = Math.max(110, Math.round(remaining * 0.50));
     setChartH(barH, btmH, btmH);
   }
-  window.addEventListener('beforeprint', function(){ setChartH(272,247,247); });
+  function rz(){
+    if(!window.Chart) return;
+    ['rpt-main-bar','rpt-main-radar','rpt-main-progress'].forEach(function(id){
+      var el=document.getElementById(id); if(!el) return;
+      var ch=Chart.getChart(el); if(!ch) return;
+      ch.resize(); try{ ch.update('none'); }catch(e){}
+    });
+  }
+  window.addEventListener('beforeprint', rz);
   window.addEventListener('afterprint',  function(){ setChartH(240,220,220); });
+  if(window.matchMedia){
+    var mq=window.matchMedia('print');
+    var h=function(m){ if(m.matches) rz(); else setChartH(240,220,220); };
+    if(mq.addEventListener) mq.addEventListener('change', h);
+    else if(mq.addListener) mq.addListener(h);
+  }
 })();
 </script>
 </body>
