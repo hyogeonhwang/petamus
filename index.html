@@ -556,7 +556,21 @@ const DEFAULT_CLASS_SUBJECTS={
 let CLASS_SUBJECTS={...DEFAULT_CLASS_SUBJECTS};
 
 // 반별 과목 가져오기
+// Term Test 과목 (모든 반 공통 고정) — 2·5·8·11월에 사용
+const TERM_SUBJECTS=[
+  {key:"term_reading",   label:"Reading & Comprehension", full:"Reading & Comprehension"},
+  {key:"term_listening", label:"Listening",              full:"Listening"},
+  {key:"term_speaking",  label:"Speaking",               full:"Speaking"},
+  {key:"term_writing",   label:"Writing",                full:"Writing"}
+];
+// Term Test를 보는 달 (분기말): 2·5·8·11월
+function isTermMonth(ym){
+  const m=+(String(ym||curMonth).slice(5,7));
+  return m===2||m===5||m===8||m===11;
+}
 function getClsSubjects(cls){
+  // Term 월에는 반과 무관하게 Term 4과목(English Skills)을 사용
+  if(isTermMonth(curMonth)) return TERM_SUBJECTS;
   return CLASS_SUBJECTS[cls]||DEFAULT_CLASS_SUBJECTS[cls]||[
     {key:"pyp",label:"PYP",full:"Primary Years Programme"},
     {key:"ela",label:"ELA",full:"English Language Arts"}
@@ -581,6 +595,7 @@ let students={};
 let PINS={...DEFAULT_PINS};
 let settings={};
 let reportMode="monthly"; // monthly | term
+let rptModeManual=false;   // 사용자가 보고서 양식을 직접 바꿨는지 (true면 월 자동판정 중단)
 let reportTerm=1;          // 1~4 (term 모드일 때 사용)
 let consCache={}; // stuId → 상담 건수 캐시
 let TEACHER_LIST={};  // id → {name, pin, cls} 교사 독립 저장소
@@ -1502,7 +1517,7 @@ function renderScoreTab(id,md,cls,locked){
     const bg=i%2===0?"#f8f9ff":"#fff";
     html+=`<tr style="background:${bg};border-bottom:1px solid #e8ecf2">
       <td style="padding:8px 10px;font-weight:700;color:#1A3169">
-        ${sub.label}<div style="font-size:10px;color:#888;font-weight:400">${sub.full}</div>
+        ${sub.label}${sub.full&&sub.full!==sub.label?`<div style="font-size:10px;color:#888;font-weight:400">${sub.full}</div>`:""}
       </td>
       <td style="padding:6px;text-align:center">
         <input type="number" id="subj-${sub.key}-score" value="${d.score||""}" ${dis} min="0"
@@ -2237,7 +2252,7 @@ function renderScr(name,params={}){
   if(name==="th"){ renderTH(); return; }
   if(name==="home"){ renderHome(); return; }
   if(name==="inp"){ if(id)renderInp(id); return; }
-  if(name==="rpt"){ if(id)renderRpt(id); return; }
+  if(name==="rpt"){ if(id){ rptModeManual=false; renderRpt(id); } return; }
   if(name==="dash"){ renderDash(); return; }
   if(name==="stus"){ renderStus(); return; }
   if(name==="tchr"){ renderTchrMgmt(); return; }
@@ -2656,6 +2671,7 @@ async function confirmAssign(tchrId){
 let rptTab=0;
 function setReportMode(mode,id){
   reportMode=mode;
+  rptModeManual=true;   // 사용자가 직접 선택 → 이 화면에선 월 자동판정 멈춤
   renderRpt(id);
 }
 function setReportTerm(t,id){
@@ -2665,6 +2681,8 @@ function setReportTerm(t,id){
 function renderRpt(id){
   const s=students[id];
   if(!s){document.getElementById("main").innerHTML="<div class='card'>학생 없음</div>";return;}
+  // Term 월(2·5·8·11월)이면 자동으로 분기(Term) 양식, 아니면 월간. (사용자가 토글로 바꾸기 전 기본값)
+  if(!rptModeManual) reportMode=isTermMonth(curMonth)?"term":"monthly";
   const md=getMD(id);
   let html=`
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px" class="no-print">
