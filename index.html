@@ -1486,6 +1486,7 @@ function autoCalcTotal(prefix){
 function renderScoreTab(id,md,cls,locked){
   const subj=md.subjects||{};
   const dis=locked&&user.role!=="admin"?"disabled":"";
+  const inpIsTerm=isTermMonth(curMonth); // Term 월이면 English Skills 양식
 
   function gradeLabel(pct){
     if(pct===null||pct===undefined) return "—";
@@ -1496,12 +1497,12 @@ function renderScoreTab(id,md,cls,locked){
   }
 
   let html=`<div class="card">
-    <h3 style="margin-bottom:14px">📊 Academic Performance</h3>
+    <h3 style="margin-bottom:14px">📊 ${inpIsTerm?"Term Test Performance":"Academic Performance"}</h3>
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead>
         <tr style="background:#1A3169;color:#C9A84C">
-          <th style="padding:8px 10px;text-align:left;border-radius:6px 0 0 0">Subject</th>
+          <th style="padding:8px 10px;text-align:left;border-radius:6px 0 0 0">${inpIsTerm?"English Skills":"Subject"}</th>
           <th style="padding:7px 6px;text-align:center">Score</th>
           <th style="padding:7px 6px;text-align:center">Class Avg</th>
           <th style="padding:7px 6px;text-align:center;border-radius:0 6px 0 0">Max</th>
