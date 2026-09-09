@@ -3837,7 +3837,7 @@ function filterStus(){
   if(stuTab===1){
     // 퇴원생 목록
     const stus=Object.values(students)
-      .filter(s=>s.status==="withdrawn"&&(!q||s.name.includes(q)||(s.ename||"").toLowerCase().includes(q)))
+      .filter(s=>s.status==="withdrawn"&&(!q||(s.name||"").includes(q)||(s.ename||"").toLowerCase().includes(q)))
       .sort((a,b)=>(b.withdrawnAt||"").localeCompare(a.withdrawnAt||""));
     if(!stus.length){el.innerHTML='<div style="color:var(--gray);font-size:13px;text-align:center;padding:20px">퇴원생이 없습니다</div>';return;}
     el.innerHTML=stus.map(s=>`
@@ -4933,7 +4933,7 @@ function filterBookName(){
   const loanStuIds=new Set(bookLoans.map(l=>l.studentId));
   const allStus=Object.entries(students)
     .map(([id,s])=>({id,name:s.name,cls:s.cls}));
-  const filtered=allStus.filter(s=>s.name.toLowerCase().includes(q));
+  const filtered=allStus.filter(s=>(s.name||"").toLowerCase().includes(q));
   if(!filtered.length){
     dropdown.innerHTML='<div style="padding:8px 12px;font-size:12px;color:#aaa">검색 결과 없음</div>';
   } else {
@@ -4968,7 +4968,7 @@ function filterLoanStu(){
   const dropdown=document.getElementById("loan-stu-dropdown");
   if(!dropdown) return;
   const list=window._loanStuList||[];
-  const filtered=q?list.filter(s=>s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q)):list;
+  const filtered=q?list.filter(s=>(s.name||"").toLowerCase().includes(q)||(s.cls||"").toLowerCase().includes(q)):list;
   if(!filtered.length){
     dropdown.innerHTML='<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
   } else {
@@ -5302,7 +5302,7 @@ function filterReturnStu(){
   const dropdown=document.getElementById("return-stu-dropdown");
   if(!dropdown||!q){if(dropdown)dropdown.style.display="none";return;}
   const list=window._returnStuList||[];
-  const filtered=list.filter(s=>s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q));
+  const filtered=list.filter(s=>(s.name||"").toLowerCase().includes(q)||(s.cls||"").toLowerCase().includes(q));
   if(!filtered.length){
     dropdown.innerHTML='<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
   } else {
